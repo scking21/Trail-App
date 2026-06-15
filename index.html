@@ -252,6 +252,12 @@
   }
   .plan-item .pi-remove:hover { color: var(--hard); }
   .plan-empty { color: var(--muted); font-size: 15px; padding: 30px 0; text-align: center; }
+  #wp-export { background: none; border: none; color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer; padding: 4px; }
+  #wp-export:hover { text-decoration: underline; }
+  #wp-export:disabled { color: var(--muted); cursor: default; text-decoration: none; }
+  .plan-item .pi-edit { border: none; background: none; color: var(--muted); font-size: 15px; cursor: pointer; line-height: 1; padding: 4px; }
+  .plan-item .pi-edit:hover { color: var(--accent); }
+  .plan-item .pi-name.clickable { cursor: pointer; }
 
   /* Trip kit: hike type, gear, hazards, rig */
   .trip-kit { margin-top: 26px; border-top: 1px solid var(--border); padding-top: 20px; }
@@ -479,6 +485,15 @@
     </div>
     <a class="directions-btn" id="plan-directions" target="_blank" rel="noopener" style="display:none;margin-bottom:16px">🧭 Directions to all trailheads</a>
     <div class="plan-list" id="plan-list"></div>
+
+    <div class="wp-section">
+      <div class="planner-head" style="margin-top:24px">
+        <h2 style="font-size:17px">📌 My Waypoints <span class="kit-tag" id="wp-count">0</span></h2>
+        <button id="wp-export" title="Export waypoints as a GPX file">Export GPX</button>
+      </div>
+      <p class="planner-sub" style="margin-bottom:14px">Spots you’ve marked with the 📌 button on the map. Tap one to zoom to it. Saved on this device.</p>
+      <div class="plan-list" id="wp-list"></div>
+    </div>
 
     <div class="trip-kit">
       <h2 style="margin:0 0 4px;font-size:17px">Trip Kit</h2>
@@ -1540,8 +1555,42 @@ function hazGroup(title, items, cls) {
   return `<div class="haz-group"><div class="haz-h">${title}</div><div class="haz-list">` +
     items.map(i => `<span class="haz-chip ${cls}">${i}</span>`).join('') + '</div></div>';
 }
+// Saved-waypoints list in the Planner. Data lives in the map module (window.Waypoints);
+// this just renders it and relays tap-to-zoom / edit / delete / export actions.
+function renderWaypointList() {
+  const listEl = document.getElementById('wp-list');
+  if (!listEl) return;
+  const countEl = document.getElementById('wp-count');
+  const exportBtn = document.getElementById('wp-export');
+  const wps = (window.Waypoints && window.Waypoints.all()) || [];
+  if (countEl) countEl.textContent = wps.length;
+  if (exportBtn) exportBtn.disabled = !wps.length;
+  if (!wps.length) {
+    listEl.innerHTML = '<div class="plan-empty">No waypoints yet — tap the 📌 button on the map to mark your spot.</div>';
+    return;
+  }
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  listEl.innerHTML = wps.map(w =>
+    `<div class="plan-item" data-id="${w.id}">` +
+    `<span class="pi-bar" style="background:#b8860b"></span>` +
+    `<div class="pi-main"><div class="pi-name clickable">📌 ${esc(w.label)}</div>` +
+    `<div class="pi-meta">${(+w.lat).toFixed(5)}, ${(+w.lon).toFixed(5)}</div></div>` +
+    `<button class="pi-edit" title="Rename">✏️</button>` +
+    `<button class="pi-remove" title="Delete">✕</button>` +
+    `</div>`).join('');
+  listEl.querySelectorAll('.plan-item').forEach(row => {
+    const id = row.dataset.id;
+    row.querySelector('.pi-name').addEventListener('click', () => window.Waypoints.focus(id));
+    row.querySelector('.pi-edit').addEventListener('click', () => window.Waypoints.edit(id));
+    row.querySelector('.pi-remove').addEventListener('click', () => window.Waypoints.remove(id));
+  });
+}
+window.renderWaypointList = renderWaypointList;
+const wpExportBtn = document.getElementById('wp-export');
+if (wpExportBtn) wpExportBtn.addEventListener('click', () => window.Waypoints && window.Waypoints.exportGPX());
+
 // Refresh region from the map view when opening the Planner with an empty plan.
-document.querySelector('nav button[data-tab="planner"]').addEventListener('click', renderTripKit);
+document.querySelector('nav button[data-tab="planner"]').addEventListener('click', () => { renderTripKit(); renderWaypointList(); });
 // Initial renderPlanner() is called at the end of the script — permitArea() needs STATES.
 
 const trailLayer = L.layerGroup().addTo(map);
@@ -1934,7 +1983,9 @@ renderPlanner();
     let waypoints = [];
     try { waypoints = JSON.parse(localStorage.getItem(WP_KEY) || '[]') || []; } catch {}
     const wpLayer = L.layerGroup().addTo(window.map);
-    const save = () => { try { localStorage.setItem(WP_KEY, JSON.stringify(waypoints)); } catch {} };
+    const listeners = [];
+    const notify = () => listeners.forEach(fn => { try { fn(); } catch {} });
+    const save = () => { try { localStorage.setItem(WP_KEY, JSON.stringify(waypoints)); } catch {} notify(); };
     const wpIcon = () => L.divIcon({ className: 'trail-end', html: '<div class="te te-wp">📌</div>', iconSize: [26, 26], iconAnchor: [13, 13] });
 
     function render() {
@@ -2035,7 +2086,47 @@ renderPlanner();
       openModal({ mode: 'create', lat: c.lat, lon: c.lon, note: c.note });
     });
 
+    // Export all waypoints as a GPX file (shares on native, downloads on web).
+    function exportGPX() {
+      if (!waypoints.length) return;
+      const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const body = waypoints.map(w =>
+        `  <wpt lat="${(+w.lat).toFixed(6)}" lon="${(+w.lon).toFixed(6)}">\n    <name>${esc(w.label || 'Waypoint')}</name>\n  </wpt>`).join('\n');
+      const gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Trail App" xmlns="http://www.topografix.com/GPX/1/1">\n${body}\n</gpx>\n`;
+      const fname = 'trail-app-waypoints.gpx';
+      const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+      try {
+        if (navigator.canShare && typeof File !== 'undefined') {
+          const file = new File([blob], fname, { type: 'application/gpx+xml' });
+          if (navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: 'Trail App waypoints' }).catch(() => {}); return; }
+        }
+      } catch (e) { /* fall through to download */ }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = fname;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    // Public API for the Planner's saved-waypoints list.
+    window.Waypoints = {
+      all: () => waypoints.map(w => ({ ...w })),
+      focus: (id) => {
+        const w = waypoints.find(x => x.id === id);
+        if (!w) return;
+        const mapTab = document.querySelector('nav button[data-tab="map"]');
+        if (mapTab) mapTab.click();
+        window.map.setView([w.lat, w.lon], 15);
+      },
+      edit: (id) => { const w = waypoints.find(x => x.id === id); if (w) openModal({ mode: 'edit', wp: w }); },
+      remove: (id) => { waypoints = waypoints.filter(x => x.id !== id); save(); render(); },
+      exportGPX,
+      onChange: (fn) => { listeners.push(fn); }
+    };
+
     render();
+    // Let the Planner render its list now that the API exists.
+    if (window.renderWaypointList) { window.Waypoints.onChange(window.renderWaypointList); window.renderWaypointList(); }
   }
 
   window.addEventListener('DOMContentLoaded', () => {
