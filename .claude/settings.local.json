@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "Bash(command -v brew)",
+      "Bash(echo \"brew: $\\(command -v brew || echo NO\\)\")",
+      "Bash(command -v sips)",
+      "Bash(echo \"sips: $\\(command -v sips || echo NO\\)\")",
+      "Bash(command -v magick convert)",
+      "Bash(command -v qlmanage)",
+      "Bash(echo \"qlmanage: $\\(command -v qlmanage || echo NO\\)\")",
+      "Bash(chmod +x scripts/apply-native-config.sh)",
+      "Bash(sed -i '' '/devbust-7chk42/d' index.html)",
+      "Bash(cp index.html www/index.html)",
+      "WebFetch(domain:github.com)",
+      "Bash(npm run *)",
+      "Bash(/usr/libexec/PlistBuddy -c \"Print :NSLocationWhenInUseUsageDescription\" ios/App/App/Info.plist)",
+      "Bash(bash scripts/apply-native-config.sh)",
+      "Read(//Applications/Android Studio.app/Contents/jbr/Contents/Home/**)",
+      "Bash(\"/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/java\" -version)",
+      "Read(//Users/corby/Library/Android/**)",
+      "Read(//Applications/Android Studio.app/Contents/**)",
+      "Bash(gem install *)",
+      "Read(//Users/corby/.gem/**)",
+      "Bash(gem env *)",
+      "Bash(ruby -v)",
+      "Bash(/Users/corby/.gem/ruby/2.6.0/bin/pod --version)",
+      "Bash(mkdir -p __TRACKED_VAR__/cmdline-tools)",
+      "Bash(curl -fsSL -o /tmp/cmdtools.zip \"https://dl.google.com/android/repository/commandlinetools-mac-11076708_latest.zip\")",
+      "Read(//tmp/**)",
+      "Bash(grep -n \"ANDROID_HOME\\\\|JAVA_HOME\\\\|Android/sdk\" \"$HOME/.zshrc\" 2>/dev/null || echo \"no android env in .zshrc yet\")",
+      "Bash(cat >> *)",
+      "Bash(printf -- '- [iOS CocoaPods/Ruby blocker]\\(ios-cocoapods-ruby-blocker.md\\) — system Ruby 2.6 too old; use Homebrew for CocoaPods. Android builds fully.\\\\n')",
+      "Bash(tail -2 MEMORY.md)",
+      "Bash(sudo -n true)",
+      "Bash(xcrun simctl *)",
+      "Bash(xcodebuild -workspace App.xcworkspace -scheme App -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -configuration Debug build)",
+      "Bash(which brew *)"
+    ]
+  }
+}

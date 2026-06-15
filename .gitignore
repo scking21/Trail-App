@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Capacitor generated native projects (regenerate with `npx cap add`)
+# Keep these if you customize native code; ignore by default.
+/ios/App/Pods/
+/ios/App/build/
+/ios/DerivedData/
+/android/.gradle/
+/android/app/build/
+/android/build/
+/android/local.properties
+/android/captures/
+.idea/
+*.iml
+
+# Xcode per-user state
+xcuserdata/
+*.xcuserstate
+
+# Generated web assets — copied from root index.html/geo.js/ar.js/sw.js by
+# `npm run copy`. Regenerate with `npm run build` (or `npm run sync`).
+/www/
+/ios/App/App/public/
+/android/app/src/main/assets/public/
+
+# OS / editor
+.DS_Store
+*.log

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2732" height="2732" viewBox="0 0 2732 2732">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2f5a37"/>
+      <stop offset="1" stop-color="#1f3a24"/>
+    </linearGradient>
+  </defs>
+  <rect width="2732" height="2732" fill="url(#bg)"/>
+  <!-- centered emblem ~ 760px -->
+  <g transform="translate(986,886)">
+    <rect width="760" height="760" rx="170" fill="#1b3320"/>
+    <path d="M0 540 L186 350 L320 478 L476 306 L632 462 L760 350 L760 760 L0 760 Z" fill="#274d2f"/>
+    <path d="M112 612 L350 268 L462 418 L536 350 L672 612 Z" fill="#3c7a47"/>
+    <path d="M350 268 L406 344 L372 352 L338 322 L316 350 Z" fill="#eef3ea"/>
+    <path d="M380 742 C 350 654, 446 624, 406 552 C 372 492, 446 476, 416 416"
+          fill="none" stroke="#f4f1e8" stroke-width="25" stroke-linecap="round" stroke-dasharray="4 34"/>
+    <circle cx="566" cy="224" r="60" fill="#f4d58d"/>
+  </g>
+  <text x="1366" y="1840" text-anchor="middle" font-family="-apple-system, Helvetica, Arial, sans-serif"
+        font-size="120" font-weight="600" fill="#f4f1e8" letter-spacing="2">Trail App</text>
+</svg>

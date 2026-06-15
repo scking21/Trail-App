@@ -1,0 +1,20 @@
+{
+  "appId": "com.trailapp.mobile",
+  "appName": "Trail App",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1200,
+      "backgroundColor": "#1f3a24",
+      "showSpinner": false,
+      "androidSplashResourceName": "splash"
+    },
+    "Geolocation": {
+      "permissions": ["location"]
+    }
+  }
+}

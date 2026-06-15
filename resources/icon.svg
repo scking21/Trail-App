@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2f5a37"/>
+      <stop offset="1" stop-color="#1f3a24"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="220" fill="url(#sky)"/>
+  <!-- back ridge -->
+  <path d="M0 720 L250 470 L430 640 L640 410 L850 620 L1024 470 L1024 1024 L0 1024 Z" fill="#274d2f"/>
+  <!-- front mountain -->
+  <path d="M150 820 L470 360 L620 560 L720 470 L900 820 Z" fill="#3c7a47"/>
+  <!-- snow cap -->
+  <path d="M470 360 L545 460 L500 472 L455 432 L425 470 Z" fill="#eef3ea"/>
+  <!-- winding trail -->
+  <path d="M512 1000 C 470 880, 600 840, 545 740 C 500 660, 600 640, 560 560"
+        fill="none" stroke="#f4f1e8" stroke-width="34" stroke-linecap="round"
+        stroke-dasharray="6 46"/>
+  <!-- sun -->
+  <circle cx="760" cy="300" r="80" fill="#f4d58d"/>
+</svg>

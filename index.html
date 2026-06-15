@@ -1,0 +1,1769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1f3a24">
+<title>Trail App</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root {
+    --panel-bg: #ffffff;
+    --border: #d8d2c4;
+    --text: #2b2a26;
+    --muted: #7a766c;
+    --accent: #2e6b34;
+    --easy: #2e8b57;
+    --moderate: #2a6fb0;
+    --hard: #c0392b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Tabs */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 0 16px;
+    background: #1f3a24;
+    color: #f4f1e8;
+    height: 52px;
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 17px; margin: 0 12px 0 0; font-weight: 600; }
+  nav { display: flex; gap: 4px; height: 100%; }
+  nav button {
+    background: none;
+    border: none;
+    color: #c9d4c5;
+    font-size: 14px;
+    padding: 0 14px;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    height: 100%;
+  }
+  nav button.active {
+    color: #fff;
+    border-bottom-color: #8fc98f;
+    font-weight: 600;
+  }
+  nav button:hover { color: #fff; }
+  #region-select {
+    margin-left: auto;
+    background: #2b4a31;
+    color: #f4f1e8;
+    border: 1px solid #3f6b45;
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .tab { flex: 1; display: none; min-height: 0; }
+  .tab.active { display: flex; }
+
+  /* Map tab layout */
+  #map { flex: 1; }
+  aside {
+    width: 300px;
+    flex-shrink: 0;
+    background: var(--panel-bg);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  aside section { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  aside h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    margin: 0 0 10px;
+  }
+
+  .layer-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 5px 0;
+    cursor: pointer;
+    font-size: 14px;
+    user-select: none;
+  }
+  .layer-row input { accent-color: var(--accent); }
+  .swatch {
+    width: 18px; height: 14px;
+    border-radius: 3px;
+    border: 1px solid rgba(0,0,0,0.25);
+    flex-shrink: 0;
+  }
+  .swatch.hatched {
+    background: repeating-linear-gradient(45deg, #b9b1a2 0 2px, transparent 2px 5px);
+  }
+
+  #land-status, #cad-status, #trail-status, #poi-status, #camp-status, #offroad-status { font-size: 10px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--muted); }
+  #land-status.loading, #cad-status.loading, #trail-status.loading, #poi-status.loading, #camp-status.loading, #offroad-status.loading { color: #b8860b; }
+  #land-status.error, #cad-status.error, #trail-status.error, #poi-status.error, #camp-status.error, #offroad-status.error { color: var(--hard); }
+  .leg-line { display: inline-block; width: 20px; height: 0; vertical-align: middle; flex-shrink: 0; }
+
+  /* Trails tab — 50-state directory */
+  #tab-trails { display: none; overflow-y: auto; flex-direction: column; padding: 22px 26px; }
+  #tab-trails.active { display: flex; }
+  .trails-intro { max-width: 760px; margin-bottom: 18px; }
+  .trails-intro h2 { margin: 0 0 6px; font-size: 20px; }
+  .trails-intro p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+  #state-search {
+    margin: 4px 0 18px; padding: 9px 12px; font-size: 14px; width: 100%; max-width: 380px;
+    border: 1px solid var(--border); border-radius: 8px;
+  }
+  .state-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; max-width: 1100px; }
+  .state-card {
+    text-align: left; background: var(--panel-bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 11px 13px; cursor: pointer; transition: border-color .12s, box-shadow .12s;
+  }
+  .state-card:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  .state-card .sc-name { font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; align-items: baseline; }
+  .state-card .sc-abbr { color: var(--muted); font-size: 11px; font-weight: 500; }
+  .state-card .sc-area { color: #4d4a42; font-size: 12px; margin-top: 3px; }
+
+  .legend-row { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 3px 0; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,0.3); }
+
+  /* Trail detail panel */
+  #detail { display: none; }
+  #detail.open { display: block; }
+  #detail h3 { margin: 0 0 2px; font-size: 16px; }
+  #detail .diff-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    border-radius: 10px;
+    padding: 2px 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 10px;
+  }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin-bottom: 12px; }
+  .stat .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat .value { font-size: 15px; font-weight: 600; }
+  #detail p.desc { font-size: 13px; color: #4d4a42; line-height: 1.45; margin: 0 0 14px; }
+  .directions-btn {
+    display: block;
+    text-align: center;
+    background: var(--accent);
+    color: #fff;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px;
+    border-radius: 8px;
+  }
+  .directions-btn:hover { background: #245428; }
+  #detail-close {
+    float: right;
+    border: none;
+    background: none;
+    font-size: 18px;
+    color: var(--muted);
+    cursor: pointer;
+    line-height: 1;
+  }
+  .placeholder {
+    margin: auto;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  /* Add-to-plan button in detail panel */
+  .plan-btn {
+    display: block; width: 100%; margin-top: 8px;
+    text-align: center; background: #fff; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 8px;
+    font-size: 14px; font-weight: 600; padding: 9px; cursor: pointer;
+  }
+  .plan-btn:hover { background: #f0f6f0; }
+  .plan-btn.added { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* Planner tab */
+  #tab-planner { display: none; overflow-y: auto; flex-direction: column; padding: 22px 26px; }
+  #tab-planner.active { display: flex; }
+  .planner-wrap { max-width: 820px; width: 100%; }
+  .planner-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+  .planner-head h2 { margin: 0; font-size: 20px; }
+  #plan-clear {
+    background: none; border: none; color: var(--hard); font-size: 13px; cursor: pointer; padding: 4px;
+  }
+  #plan-clear:hover { text-decoration: underline; }
+  .planner-sub { color: var(--muted); font-size: 14px; margin: 0 0 18px; }
+
+  .plan-totals {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+    background: #f6f4ee; border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px; margin-bottom: 18px;
+  }
+  .plan-totals .pt { text-align: center; }
+  .plan-totals .pt-val { font-size: 22px; font-weight: 700; color: var(--accent); }
+  .plan-totals .pt-lab { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-top: 2px; }
+
+  .plan-list { display: flex; flex-direction: column; gap: 10px; }
+  .plan-item {
+    display: flex; align-items: center; gap: 12px;
+    border: 1px solid var(--border); border-radius: 10px; padding: 11px 14px; background: #fff;
+  }
+  .plan-item .pi-bar { width: 5px; align-self: stretch; border-radius: 3px; flex-shrink: 0; }
+  .plan-item .pi-main { flex: 1; min-width: 0; }
+  .plan-item .pi-name { font-weight: 600; font-size: 15px; }
+  .plan-item .pi-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .plan-item .pi-remove {
+    border: none; background: none; color: var(--muted); font-size: 18px; cursor: pointer; line-height: 1; padding: 4px;
+  }
+  .plan-item .pi-remove:hover { color: var(--hard); }
+  .plan-empty { color: var(--muted); font-size: 15px; padding: 30px 0; text-align: center; }
+
+  /* Trip kit: hike type, gear, hazards, rig */
+  .trip-kit { margin-top: 26px; border-top: 1px solid var(--border); padding-top: 20px; }
+  .kit-types { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .kit-type {
+    border: 1px solid var(--border); background: #fff; border-radius: 20px;
+    padding: 7px 15px; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer;
+  }
+  .kit-type:hover { border-color: var(--accent); }
+  .kit-type.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .kit-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .kit-card { border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; background: #fff; }
+  .kit-card h3 { margin: 0 0 10px; font-size: 14px; display: flex; align-items: baseline; gap: 6px; }
+  .kit-tag { font-size: 11px; font-weight: 600; color: var(--muted); background: #f0eee7; border-radius: 10px; padding: 2px 8px; }
+  .gear-row { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; padding: 3px 0; cursor: pointer; }
+  .gear-row input { accent-color: var(--accent); margin-top: 2px; }
+  .haz-group { margin-bottom: 9px; }
+  .haz-group .haz-h { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 3px; }
+  .haz-list { display: flex; flex-wrap: wrap; gap: 5px; }
+  .haz-chip { font-size: 12px; background: #fbeee9; color: #9a3b22; border: 1px solid #f0d3c8; border-radius: 8px; padding: 2px 8px; }
+  .haz-chip.plant { background: #eef6ea; color: #3f6b2e; border-color: #d5e8cb; }
+  .haz-chip.cond { background: #eef2f8; color: #355a86; border-color: #d2def0; }
+  .rig-line { font-size: 13px; margin: 4px 0; }
+  .rig-line .rl-lab { color: var(--muted); }
+  .rig-list { margin: 6px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.5; }
+  .kit-note { font-size: 11px; color: var(--muted); margin-top: 12px; line-height: 1.4; }
+
+  /* Permits & passes */
+  .permit-card { margin-top: 14px; }
+  .permit-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .permit-row:last-child { border-bottom: none; }
+  .permit-main { flex: 1; min-width: 0; }
+  .permit-title { font-weight: 600; font-size: 14px; }
+  .permit-desc { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+  .permit-link {
+    flex-shrink: 0; background: var(--accent); color: #fff; text-decoration: none;
+    font-size: 13px; font-weight: 600; padding: 7px 13px; border-radius: 8px; white-space: nowrap;
+  }
+  .permit-link:hover { background: #245428; }
+
+  .trail-marker {
+    width: 18px; height: 18px;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    border: 2px solid #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.45);
+  }
+
+  /* Trailhead / terminus endpoint badges */
+  .trail-end { background: none; border: none; }
+  .te {
+    width: 24px; height: 24px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; line-height: 1;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  }
+  .te-head { border: 2px solid var(--easy); }    /* trailhead — green ring */
+  .te-end  { border: 2px solid var(--hard); }    /* terminus  — red ring */
+
+  /* ---- Mobile / native (Capacitor) polish ---- */
+  /* Respect notches & status bars on both platforms */
+  header { padding-top: env(safe-area-inset-top); height: calc(52px + env(safe-area-inset-top)); }
+
+  @media (max-width: 760px), (pointer: coarse) {
+    header { gap: 6px; padding-left: max(10px, env(safe-area-inset-left)); padding-right: max(10px, env(safe-area-inset-right)); overflow: hidden; }
+    header h1 { font-size: 15px; margin-right: 2px; white-space: nowrap; flex-shrink: 0; }
+    nav { gap: 0; }
+    nav button { padding: 0 12px; font-size: 13px; min-height: 44px; }   /* 44px = min touch target */
+    #region-select { padding: 7px 8px; font-size: 12px; max-width: 38vw; }
+
+    /* Map tab becomes vertical: full-bleed map + draggable bottom panel */
+    #tab-map.active { flex-direction: column; }
+    #map { flex: 1; min-height: 40vh; }
+    aside {
+      width: 100%;
+      max-height: 45vh;
+      border-left: none;
+      border-top: 1px solid var(--border);
+      box-shadow: 0 -4px 18px rgba(0,0,0,0.12);
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    /* Drag handle affordance on the panel */
+    aside::before {
+      content: ""; display: block; width: 38px; height: 4px; border-radius: 2px;
+      background: var(--border); margin: 8px auto 2px;
+    }
+    .layer-row { padding: 9px 0; font-size: 15px; }       /* easier to tap */
+    .layer-row input { width: 20px; height: 20px; }
+
+    /* Trails & Planner tabs: comfortable phone padding + safe areas */
+    #tab-trails, #tab-planner {
+      padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+    }
+    .state-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+
+    /* Detail card: float as an opaque bottom sheet over everything */
+    #detail.open {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 1200;
+      background: var(--panel-bg);          /* opaque — was showing the layer list through it */
+      border-top: 1px solid var(--border);
+      border-radius: 16px 16px 0 0;
+      box-shadow: 0 -6px 24px rgba(0,0,0,0.3);
+      padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+      max-height: 72vh; overflow-y: auto;
+    }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🥾 Trail App</h1>
+  <nav>
+    <button class="active" data-tab="map">Map</button>
+    <button data-tab="trails">Trails</button>
+    <button data-tab="planner">Planner</button>
+  </nav>
+  <select id="region-select" title="Jump to region"></select>
+</header>
+
+<div class="tab active" id="tab-map">
+  <div id="map"></div>
+  <aside>
+    <section>
+      <h2>Land Layers <span id="land-status" title="PAD-US live data status"></span></h2>
+      <label class="layer-row"><input type="checkbox" checked data-layer="nf"><span class="swatch" style="background:#a8c8a0"></span>National Forest</label>
+      <label class="layer-row"><input type="checkbox" checked data-layer="nps"><span class="swatch" style="background:#cf9b6c"></span>National Park (NPS)</label>
+      <label class="layer-row"><input type="checkbox" checked data-layer="wild"><span class="swatch" style="background:#6f9e6b"></span>Wilderness</label>
+      <label class="layer-row"><input type="checkbox" checked data-layer="blm"><span class="swatch" style="background:#e8c98a"></span>BLM</label>
+      <label class="layer-row"><input type="checkbox" checked data-layer="sp"><span class="swatch" style="background:#9ec3e0"></span>State Park</label>
+      <label class="layer-row"><input type="checkbox" checked data-layer="priv"><span class="swatch hatched"></span>Private</label>
+    </section>
+    <section>
+      <h2>Cadastral <span id="cad-status"></span></h2>
+      <label class="layer-row"><input type="checkbox" data-cad="parcels"><span class="swatch" style="background:transparent;border-color:#555"></span>Parcels (county/state)</label>
+      <label class="layer-row"><input type="checkbox" checked data-cad="esmt"><span class="swatch" style="background:#7e57c2"></span>Conservation Easements</label>
+    </section>
+    <section>
+      <h2>Points of Interest <span id="poi-status"></span></h2>
+      <label class="layer-row"><input type="checkbox" checked data-poi="th"><span class="dot" style="background:#1f7a3d;width:11px;height:11px"></span>Trailheads</label>
+      <label class="layer-row"><input type="checkbox" data-poi="vc"><span class="dot" style="background:#2a6fb0;width:11px;height:11px"></span>Visitor Centers</label>
+      <label class="layer-row"><input type="checkbox" data-poi="rs"><span class="dot" style="background:#8a5a2b;width:11px;height:11px"></span>Ranger Stations</label>
+    </section>
+    <section>
+      <h2>Water &amp; Camps <span id="camp-status"></span></h2>
+      <label class="layer-row"><input type="checkbox" data-camp="water"><span class="dot" style="background:#2a8fd0;width:11px;height:11px"></span>Water sources</label>
+      <label class="layer-row"><input type="checkbox" data-camp="cg"><span class="dot" style="background:#2e8b57;width:11px;height:11px"></span>Campgrounds (official)</label>
+      <label class="layer-row"><input type="checkbox" data-camp="rv"><span class="dot" style="background:#d98a2b;width:11px;height:11px"></span>RV / Caravan sites</label>
+      <label class="layer-row"><input type="checkbox" data-camp="bc"><span class="dot" style="background:#8a5a2b;width:11px;height:11px"></span>Backcountry / dispersed</label>
+    </section>
+    <section>
+      <h2>Trails <span id="trail-status"></span></h2>
+      <label class="layer-row"><input type="checkbox" checked data-trails="usgs"><span class="swatch" style="background:#c0563b"></span>Hiking Trails (USGS)</label>
+      <label class="layer-row"><input type="checkbox" data-trails="run"><span class="swatch" style="background:repeating-linear-gradient(90deg,#2e8b57 0 5px,transparent 5px 8px)"></span>Trail Running (singletrack)</label>
+      <label class="layer-row"><input type="checkbox" data-trails="mtb"><span class="swatch" style="background:repeating-linear-gradient(90deg,#7a3ca8 0 2px,transparent 2px 5px)"></span>Mountain Biking</label>
+      <label class="layer-row"><input type="checkbox" checked id="endpoints-toggle"><span style="display:inline-flex;gap:2px"><span style="font-size:12px">🥾</span><span style="font-size:12px">🏁</span></span>Trailheads &amp; termini</label>
+      <div class="legend-row" style="margin-top:8px"><span class="dot" style="background:var(--easy)"></span>Easy</div>
+      <div class="legend-row"><span class="dot" style="background:var(--moderate)"></span>Moderate</div>
+      <div class="legend-row"><span class="dot" style="background:var(--hard)"></span>Hard</div>
+      <div class="legend-row" style="margin-top:8px"><span class="leg-line" style="border-top:2.5px solid #888"></span>Hiking — solid</div>
+      <div class="legend-row"><span class="leg-line" style="border-top:2.5px dashed #888"></span>Trail running — dashed (natural-surface singletrack)</div>
+      <div class="legend-row"><span class="leg-line" style="border-top:2.5px dotted #888"></span>Mountain biking — dotted (bike-permitted)</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4">Line &amp; marker color show difficulty (graded by length, est.). Line style shows activity. Run/bike layers filter the USGS trail network by surface and bike access.</div>
+    </section>
+    <section>
+      <h2>Off-Road / OHV <span id="offroad-status"></span></h2>
+      <label class="layer-row"><input type="checkbox" data-offroad="ohv"><span class="swatch" style="background:repeating-linear-gradient(90deg,#7a5230 0 4px,transparent 4px 7px)"></span>4x4 / OHV tracks</label>
+      <div class="legend-row" style="margin-top:8px"><span class="leg-line" style="border-top:3px dashed var(--easy)"></span>Easy — graded dirt/gravel</div>
+      <div class="legend-row"><span class="leg-line" style="border-top:3px dashed var(--moderate)"></span>Moderate — high-clearance</div>
+      <div class="legend-row"><span class="leg-line" style="border-top:3px dashed var(--hard)"></span>Hard — 4x4 / rough</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4">Dashed lines = vehicle tracks (OSM). Difficulty from track grade / 4WD-only tags.</div>
+    </section>
+    <section id="detail">
+      <button id="detail-close" title="Close">✕</button>
+      <h3 id="d-name"></h3>
+      <span class="diff-badge" id="d-diff"></span>
+      <div class="stats">
+        <div class="stat"><div class="label" id="d-label-length">Length</div><div class="value" id="d-length"></div></div>
+        <div class="stat"><div class="label" id="d-label-gain">Elev. Gain</div><div class="value" id="d-gain"></div></div>
+        <div class="stat"><div class="label" id="d-label-time">Est. Time</div><div class="value" id="d-time"></div></div>
+        <div class="stat"><div class="label" id="d-label-land">Land</div><div class="value" id="d-land"></div></div>
+      </div>
+      <p class="desc" id="d-desc"></p>
+      <a class="directions-btn" id="d-directions" target="_blank" rel="noopener">🧭 Directions via OSM</a>
+      <button class="directions-btn" id="d-ar" style="display:none;margin-top:8px;background:#2b4a31;border:none;cursor:pointer;width:100%">📷 AR — point me there</button>
+      <button class="plan-btn" id="d-add-plan">＋ Add to Plan</button>
+    </section>
+  </aside>
+</div>
+
+<div class="tab" id="tab-trails">
+  <div class="trails-intro">
+    <h2>Browse trails by state</h2>
+    <p>All 50 states. Pick a state to jump the map to its flagship hiking region — live USGS trail lines, PAD-US public &amp; private land, and NCED conservation easements load automatically for wherever you pan.</p>
+  </div>
+  <input id="state-search" type="search" placeholder="Filter states…" autocomplete="off">
+  <div class="state-grid" id="state-grid"></div>
+</div>
+<div class="tab" id="tab-planner">
+  <div class="planner-wrap">
+    <div class="planner-head">
+      <h2>Trip Plan</h2>
+      <button id="plan-clear" title="Remove all trails">Clear all</button>
+    </div>
+    <p class="planner-sub">Trails you’ve added build an itinerary with running totals. Click any trailhead on the map and choose <strong>Add to Plan</strong>. Saved on this device.</p>
+    <div class="plan-totals">
+      <div class="pt"><div class="pt-val" id="pt-count">0</div><div class="pt-lab">Trails</div></div>
+      <div class="pt"><div class="pt-val" id="pt-dist">0.0 mi</div><div class="pt-lab">Distance</div></div>
+      <div class="pt"><div class="pt-val" id="pt-gain">0 ft</div><div class="pt-lab">Elev. Gain</div></div>
+      <div class="pt"><div class="pt-val" id="pt-time">0.0 h</div><div class="pt-lab">Est. Time</div></div>
+    </div>
+    <a class="directions-btn" id="plan-directions" target="_blank" rel="noopener" style="display:none;margin-bottom:16px">🧭 Directions to all trailheads</a>
+    <div class="plan-list" id="plan-list"></div>
+
+    <div class="trip-kit">
+      <h2 style="margin:0 0 4px;font-size:17px">Trip Kit</h2>
+      <p class="planner-sub" style="margin-bottom:14px">Pick how you’re going — gear, hazards, and vehicle advice update to match.</p>
+      <div class="kit-types" id="kit-types"></div>
+      <div class="kit-grid">
+        <div class="kit-card">
+          <h3>🎒 Recommended Gear <span class="kit-tag" id="kit-gear-tag"></span></h3>
+          <div id="kit-gear"></div>
+        </div>
+        <div class="kit-card">
+          <h3>⚠️ Watch Out For <span class="kit-tag" id="kit-region"></span></h3>
+          <div id="kit-hazards"></div>
+        </div>
+        <div class="kit-card" id="kit-rig-card">
+          <h3>🚙 Vehicle / Rig <span class="kit-tag" id="kit-terrain"></span></h3>
+          <div id="kit-rig"></div>
+        </div>
+      </div>
+      <div class="kit-card permit-card">
+        <h3>📋 Permits &amp; Passes <span class="kit-tag" id="kit-permit-area"></span></h3>
+        <div id="kit-permits"></div>
+      </div>
+      <p class="kit-note">Hazards are based on the region of your planned trails (or the current map view) and are general guidance — always check local conditions, closures, and seasonal warnings. Gear ticks are saved on this device.</p>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="geo.js"></script>
+<script src="ar.js"></script>
+<script>
+// ---------- Tabs ----------
+document.querySelectorAll('nav button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + btn.dataset.tab));
+    if (btn.dataset.tab === 'map') map.invalidateSize();
+  });
+});
+
+// ---------- Map ----------
+const map = L.map('map').setView([33.43, -111.42], 12); // Superstition Mtns, AZ
+window.map = map; // exposed for the native bridge (locate button, etc.)
+L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+  maxZoom: 17,
+  attribution: 'Map data © OpenStreetMap contributors, SRTM | Tiles © OpenTopoMap (CC-BY-SA)'
+}).addTo(map);
+
+// SVG hatch pattern for private land
+const svgDefs = `
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <pattern id="hatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#8a8273" stroke-width="2"/>
+    </pattern>
+  </defs>
+</svg>`;
+document.body.insertAdjacentHTML('beforeend', svgDefs);
+
+// ============================================================================
+//  Live-data layer engine — config-driven
+//  Every overlay (PAD-US land, NCED easements, county parcels, USGS trails) is
+//  declared as a spec below. The engine handles fetching, viewport scoping,
+//  geometry simplification, zoom-gating, stale-response guarding, and status.
+//  Adding a new data source = adding one spec, not another loader.
+// ============================================================================
+
+// ---- shared helpers ----
+// Drop geometry precision as we zoom out so payloads stay small.
+function offsetForZoom(z) { return z >= 13 ? 0 : z >= 11 ? 0.0008 : z >= 10 ? 0.002 : 0.005; }
+function viewEnvelope() { const b = map.getBounds(); return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].join(','); }
+
+// One Esri FeatureServer query -> GeoJSON. `url` is the layer base (no /query).
+async function fetchGeoJSON(url, where, outFields, env, offset, cap) {
+  const params = new URLSearchParams({
+    where: where || '1=1', geometry: env, geometryType: 'esriGeometryEnvelope',
+    inSR: '4326', outSR: '4326', spatialRel: 'esriSpatialRelIntersects',
+    outFields, maxAllowableOffset: String(offset), geometryPrecision: '5',
+    resultRecordCount: String(cap), f: 'geojson'
+  });
+  return (await fetch(`${url}/query?${params}`)).json();
+}
+
+// Build a toggleable overlay from a spec:
+//   { toggle, minZoom, cap, zoomNote, style, tooltip(props), sources:[{url,where,outFields,norm?}] }
+function makeOverlay(spec) {
+  spec.cb = document.querySelector(spec.toggle);
+  const opts = {
+    onEachFeature: (f, l) => {
+      const t = spec.tooltip(f.properties); if (t) l.bindTooltip(t, { sticky: true });
+      if (spec.onClick) l.on('click', e => spec.onClick(f.properties, e.latlng));
+    }
+  };
+  if (spec.pointToLayer) opts.pointToLayer = spec.pointToLayer; // point overlays
+  else opts.style = spec.style;                                 // polygon / line overlays
+  spec.layer = L.geoJSON(null, opts);
+  if (spec.cb.checked) spec.layer.addTo(map);
+  return spec;
+}
+
+// Load one overlay for the current view. Resolves to:
+//   {note} if zoom-gated, {count,truncated} on success, or null if stale/off.
+async function loadOverlay(spec, env, offset, isCurrent) {
+  if (!spec.cb.checked) return null;
+  if (map.getZoom() < spec.minZoom) { spec.layer.clearLayers(); return { note: spec.zoomNote }; }
+  const perSource = await Promise.all(spec.sources.map(async s => {
+    try {
+      const gj = s.fetch ? await s.fetch(env, offset, spec.cap)
+                         : await fetchGeoJSON(s.url, s.where, s.outFields, env, offset, spec.cap);
+      const feats = gj.features || [];
+      if (s.norm) feats.forEach(f => { f.properties._norm = s.norm(f.properties); });
+      return feats;
+    } catch { return []; }
+  }));
+  if (!isCurrent()) return null;
+  spec.layer.clearLayers();
+  const feats = perSource.flat();
+  if (feats.length) spec.layer.addData({ type: 'FeatureCollection', features: feats });
+  if (spec.afterLoad) spec.afterLoad(feats, spec.layer);   // e.g. trailhead/terminus markers
+  return { count: feats.length, truncated: perSource.some(r => r.length >= spec.cap) };
+}
+
+// A group bundles overlays under one status element + a status formatter.
+function makeGroup(statusId, specs, formatStatus) {
+  const g = { el: document.getElementById(statusId), specs, formatStatus, token: 0 };
+  specs.forEach(s => {
+    s.group = g;
+    s.cb.addEventListener('change', () => {
+      if (s.cb.checked) { s.layer.addTo(map); loadGroup(g); }
+      else { map.removeLayer(s.layer); s.layer.clearLayers(); loadGroup(g); }
+    });
+  });
+  return g;
+}
+
+async function loadGroup(g) {
+  const active = g.specs.filter(s => s.cb.checked);
+  if (!active.length) { g.el.textContent = ''; g.el.className = ''; return; }
+  const token = ++g.token, isCurrent = () => token === g.token;
+  g.el.textContent = '· loading…'; g.el.className = 'loading';
+  const env = viewEnvelope(), offset = offsetForZoom(map.getZoom());
+  try {
+    const results = (await Promise.all(active.map(s => loadOverlay(s, env, offset, isCurrent)))).filter(Boolean);
+    if (!isCurrent()) return;
+    const info = {
+      notes: [...new Set(results.filter(r => r.note).map(r => r.note))],
+      total: results.reduce((n, r) => n + (r.count || 0), 0),
+      truncated: results.some(r => r.truncated)
+    };
+    const [txt, cls] = g.formatStatus(info);
+    g.el.textContent = txt; g.el.className = cls || '';
+  } catch (err) {
+    if (isCurrent()) { g.el.textContent = '· data error'; g.el.className = 'error'; }
+    console.warn('Layer load failed', err);
+  }
+}
+
+// ---- endpoints ----
+const PADUS_URL = 'https://services.arcgis.com/v01gqwM5QqNysAAi/arcgis/rest/services/Manager_Name_PADUS/FeatureServer/0';
+const NCED_URL  = 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/nced_DO_NOT_DELETE_240308_view/FeatureServer/0';
+const TRAILS_URL = 'https://carto.nationalmap.gov/arcgis/rest/services/transportation/MapServer/37';
+const ACCESS_LABEL = { OA: 'Open', RA: 'Restricted', XA: 'Closed', UK: 'Unknown' };
+const PAD_FIELDS = 'Unit_Nm,Loc_Nm,Mang_Name,Des_Tp,Own_Type';
+
+// ---- LAND group (PAD-US): one source per category, same endpoint, different filter ----
+function padSpec(toggle, label, where, style) {
+  return makeOverlay({
+    toggle, minZoom: 9, cap: 600, zoomNote: 'zoom in to load', style,
+    sources: [{ url: PADUS_URL, where, outFields: PAD_FIELDS }],
+    tooltip: a => `<strong>${a.Unit_Nm || a.Loc_Nm || label}</strong><br>${label}`
+  });
+}
+const landGroup = makeGroup('land-status', [
+  padSpec('input[data-layer="nf"]',   'National Forest', "Mang_Name='USFS'", { color: '#5c8a55', weight: 1, fillColor: '#a8c8a0', fillOpacity: 0.45 }),
+  padSpec('input[data-layer="nps"]',  'National Park',   "Mang_Name='NPS'",  { color: '#8a5a2b', weight: 1, fillColor: '#cf9b6c', fillOpacity: 0.45 }),
+  padSpec('input[data-layer="wild"]', 'Wilderness',      "Des_Tp='WA'",      { color: '#3f6b3c', weight: 1, fillColor: '#6f9e6b', fillOpacity: 0.5  }),
+  padSpec('input[data-layer="blm"]',  'BLM',             "Mang_Name='BLM'",  { color: '#b58a3c', weight: 1, fillColor: '#e8c98a', fillOpacity: 0.45 }),
+  padSpec('input[data-layer="sp"]',   'State Park',      "Des_Tp='SP'",      { color: '#4a7da6', weight: 1, fillColor: '#9ec3e0', fillOpacity: 0.5  }),
+  padSpec('input[data-layer="priv"]', 'Private',         "Own_Type='PVT'",   { color: '#8a8273', weight: 1, fillColor: 'url(#hatch)', fillOpacity: 1 })
+], info => info.notes.length ? ['· ' + info.notes.join(' · '), 'error'] : ['· live (PAD-US)', '']);
+
+// ---- CADASTRAL group: county/state parcels + NCED easements ----
+const parcelSpec = makeOverlay({
+  toggle: 'input[data-cad="parcels"]', minZoom: 14, cap: 2000, zoomNote: 'parcels: zoom in',
+  style: { color: '#444', weight: 0.7, fill: false },
+  sources: [
+    // Colorado — Chaffee County (Salida) + statewide
+    { url: 'https://services8.arcgis.com/fRzYA77NIM7odeAM/arcgis/rest/services/CHAFFEE_PARCELS_20250603/FeatureServer/0',
+      outFields: 'PARCEL,ADDRESS,NAME1,GIS_Acres',
+      norm: a => ({ owner: a.NAME1, address: a.ADDRESS, acres: a.GIS_Acres, parcel: a.PARCEL }) },
+    { url: 'https://gis.colorado.gov/public/rest/services/Address_and_Parcel/Colorado_Public_Parcels/FeatureServer/0',
+      outFields: 'parcel_id,situsAdd,owner,landAcres',
+      norm: a => ({ owner: a.owner, address: a.situsAdd, acres: a.landAcres, parcel: a.parcel_id }) },
+    // Arizona — Maricopa County (west Superstitions / Apache Junction)
+    { url: 'https://services.arcgis.com/ykpntM6e3tHvzKRJ/arcgis/rest/services/Parcels_view/FeatureServer/0',
+      outFields: 'APN_DASH,OWNER_NAME,PHYSICAL_STREET_NUM,PHYSICAL_STREET_DIR,PHYSICAL_STREET_NAME,PHYSICAL_STREET_TYPE,PHYSICAL_CITY',
+      norm: a => ({ owner: a.OWNER_NAME,
+        address: [a.PHYSICAL_STREET_NUM, a.PHYSICAL_STREET_DIR, a.PHYSICAL_STREET_NAME, a.PHYSICAL_STREET_TYPE].filter(Boolean).join(' ') +
+                 (a.PHYSICAL_CITY ? ', ' + a.PHYSICAL_CITY : ''), acres: null, parcel: a.APN_DASH }) },
+    // Arizona — Pinal County (east Superstitions / Gold Canyon)
+    { url: 'https://services7.arcgis.com/MlfUGd2UJYefAS7v/arcgis/rest/services/Pinal_County_Tax_Parcels_viewer/FeatureServer/0',
+      outFields: 'parcelid,siteaddres,ownernme1,usedscrp',
+      norm: a => ({ owner: a.ownernme1, address: a.siteaddres, acres: null, parcel: a.parcelid }) }
+  ],
+  tooltip: p0 => {
+    const p = p0._norm;
+    const ac = (typeof p.acres === 'number') ? `${p.acres.toFixed(2)} ac` : '';
+    return `<strong>${p.owner || '—'}</strong><br>${p.address || ''}` +
+           `<br><small>${[ac, p.parcel && 'Parcel ' + p.parcel].filter(Boolean).join(' · ')}</small>`;
+  }
+});
+const esmtSpec = makeOverlay({
+  toggle: 'input[data-cad="esmt"]', minZoom: 9, cap: 1000, zoomNote: 'easements: zoom in',
+  style: { color: '#5e35b1', weight: 1, fillColor: '#7e57c2', fillOpacity: 0.35 },
+  sources: [{ url: NCED_URL, outFields: 'esmthldr,purpose,year_est,gis_acres,pubaccess' }],
+  tooltip: a => {
+    const yr = a.year_est ? `Est. ${a.year_est}` : '';
+    const ac = a.gis_acres ? `${Math.round(a.gis_acres)} ac` : '';
+    const acc = ACCESS_LABEL[a.pubaccess] ? `Access: ${ACCESS_LABEL[a.pubaccess]}` : '';
+    return `<strong>${a.esmthldr || 'Conservation Easement'}</strong><br>${a.purpose || 'Conservation easement'}` +
+           `<br><small>${[yr, ac, acc].filter(Boolean).join(' · ')}</small>`;
+  }
+});
+const cadGroup = makeGroup('cad-status', [parcelSpec, esmtSpec], info => {
+  const notes = info.notes.slice();
+  if (info.truncated) notes.push('parcels truncated — zoom in');
+  return notes.length ? ['· ' + notes.join(' · '), 'error'] : ['· live', ''];
+});
+
+// ---- TRAILS group: USGS National Map national trail lines ----
+// USGS trail data carries no grade, so estimate difficulty from length (distance proxy).
+function estDifficulty(lengthMiles) {
+  const m = +lengthMiles;
+  if (!m) return 'moderate';
+  if (m < 3) return 'easy';
+  if (m <= 7) return 'moderate';
+  return 'hard';
+}
+const usgsTrailSpec = makeOverlay({
+  toggle: 'input[data-trails="usgs"]', minZoom: 11, cap: 1500, zoomNote: 'zoom in to load',
+  style: f => ({ color: diffColors[estDifficulty(f.properties.lengthmiles)], weight: 2.5, opacity: 0.85 }),
+  // Include trails flagged for hiking OR unspecified (many NPS/state units leave the
+  // flag null, e.g. Zion); exclude only motorized-only routes.
+  sources: [{ url: TRAILS_URL, where: "(hikerpedestrian='Y' OR hikerpedestrian IS NULL)",
+    outFields: 'name,lengthmiles,primarytrailmaintainer,trailsurface,nationaltraildesignation,hikerpedestrian,bicycle,packsaddle' }],
+  onClick: (props, latlng) => showUsgsTrail(props, latlng),
+  tooltip: a => {
+    const len = a.lengthmiles ? `${(+a.lengthmiles).toFixed(1)} mi` : '';
+    const diff = estDifficulty(a.lengthmiles);
+    const uses = [a.hikerpedestrian === 'Y' && 'hiking', a.bicycle === 'Y' && 'bike', a.packsaddle === 'Y' && 'horse'].filter(Boolean).join(' · ');
+    return `<strong>${a.name || 'Unnamed trail'}</strong>` +
+           `<br><small>${[len, diff + ' (est.)', a.primarytrailmaintainer, a.trailsurface].filter(Boolean).join(' · ')}</small>` +
+           (a.nationaltraildesignation ? `<br><small>${a.nationaltraildesignation}</small>` : '') +
+           (uses ? `<br><small>${uses}</small>` : '');
+  }
+});
+// Shared tooltip for the activity-specific trail layers (run / bike).
+const TRAIL_OUTFIELDS = 'name,lengthmiles,primarytrailmaintainer,trailsurface,nationaltraildesignation,hikerpedestrian,bicycle,packsaddle';
+const activityTooltip = label => a => {
+  const len = a.lengthmiles ? `${(+a.lengthmiles).toFixed(1)} mi` : '';
+  const diff = estDifficulty(a.lengthmiles);
+  return `<strong>${a.name || 'Unnamed trail'}</strong> <small>· ${label}</small>` +
+         `<br><small>${[len, diff + ' (est.)', a.primarytrailmaintainer, a.trailsurface].filter(Boolean).join(' · ')}</small>` +
+         (a.nationaltraildesignation ? `<br><small>${a.nationaltraildesignation}</small>` : '');
+};
+// Trail running: hiker trails on natural (unpaved) singletrack — exclude paved surfaces.
+const runTrailSpec = makeOverlay({
+  toggle: 'input[data-trails="run"]', minZoom: 11, cap: 1500, zoomNote: 'zoom in to load',
+  style: f => ({ color: diffColors[estDifficulty(f.properties.lengthmiles)], weight: 2.5, opacity: 0.85, dashArray: '6,4' }),
+  sources: [{ url: TRAILS_URL,
+    where: "(hikerpedestrian='Y' OR hikerpedestrian IS NULL) AND (trailsurface IS NULL OR trailsurface NOT IN ('Asphalt','Concrete','Paver'))",
+    outFields: TRAIL_OUTFIELDS }],
+  onClick: (props, latlng) => showUsgsTrail(props, latlng),
+  tooltip: activityTooltip('trail running')
+});
+// Mountain biking: trails explicitly flagged bike-permitted by USGS.
+const mtbTrailSpec = makeOverlay({
+  toggle: 'input[data-trails="mtb"]', minZoom: 11, cap: 1500, zoomNote: 'zoom in to load',
+  style: f => ({ color: diffColors[estDifficulty(f.properties.lengthmiles)], weight: 2.5, opacity: 0.9, dashArray: '2,4' }),
+  sources: [{ url: TRAILS_URL, where: "bicycle='Y'", outFields: TRAIL_OUTFIELDS }],
+  onClick: (props, latlng) => showUsgsTrail(props, latlng),
+  tooltip: activityTooltip('mountain biking')
+});
+// Trailhead / terminus markers ---------------------------------------------
+// USGS delivers trails as many short segments. Merge segments that share a name,
+// then a coordinate touched by only ONE segment end is a true terminus of that
+// trail (shared coords are interior junctions). First terminus = trailhead.
+const endpointIcon = kind => L.divIcon({
+  className: 'trail-end',
+  html: `<div class="te te-${kind}">${kind === 'head' ? '🥾' : '🏁'}</div>`,
+  iconSize: [24, 24], iconAnchor: [12, 12]
+});
+function lineEnds(geom) {
+  if (!geom) return [];
+  const lines = geom.type === 'MultiLineString' ? geom.coordinates
+              : geom.type === 'LineString' ? [geom.coordinates] : [];
+  const ends = [];
+  for (const ln of lines) if (ln.length >= 2) { ends.push(ln[0], ln[ln.length - 1]); }
+  return ends;
+}
+// Endpoints live in their own layer so they can be toggled and zoom-gated
+// independently of the trail lines.
+const MIN_ENDPOINT_ZOOM = 13;
+const trailEndpointLayer = L.layerGroup();
+const endpointsCb = document.getElementById('endpoints-toggle');
+
+function buildTrailEndpoints(feats) {
+  trailEndpointLayer.clearLayers();
+  const byName = new Map();                 // name -> { counts, coord }
+  for (const f of feats) {
+    const name = (f.properties && f.properties.name && f.properties.name.trim());
+    if (!name) continue;                    // skip unnamed segments — too noisy
+    let g = byName.get(name);
+    if (!g) { g = { counts: {}, coord: {} }; byName.set(name, g); }
+    for (const pt of lineEnds(f.geometry)) {
+      const k = pt[0].toFixed(4) + ',' + pt[1].toFixed(4);
+      g.counts[k] = (g.counts[k] || 0) + 1;
+      g.coord[k] = pt;
+    }
+  }
+  let budget = 500;                          // clutter / perf cap
+  for (const [name, g] of byName) {
+    const termini = Object.keys(g.counts).filter(k => g.counts[k] === 1).map(k => g.coord[k]);
+    if (!termini.length) continue;
+    // stable order so "trailhead" is consistent across reloads (north-most first)
+    termini.sort((a, b) => b[1] - a[1] || a[0] - b[0]);
+    termini.forEach((pt, i) => {
+      if (budget-- <= 0) return;
+      const kind = i === 0 ? 'head' : 'end';
+      L.marker([pt[1], pt[0]], { icon: endpointIcon(kind), interactive: true, keyboard: false })
+        .bindTooltip(`${name} — ${kind === 'head' ? 'Trailhead' : 'Terminus'}`, { direction: 'top' })
+        .addTo(trailEndpointLayer);
+    });
+  }
+  refreshEndpointVisibility();
+}
+// Show endpoints only when: toggle on, trails layer on, and zoomed in enough.
+function refreshEndpointVisibility() {
+  const show = endpointsCb.checked && usgsTrailSpec.cb.checked && map.getZoom() >= MIN_ENDPOINT_ZOOM;
+  if (show) { if (!map.hasLayer(trailEndpointLayer)) trailEndpointLayer.addTo(map); }
+  else if (map.hasLayer(trailEndpointLayer)) map.removeLayer(trailEndpointLayer);
+}
+usgsTrailSpec.afterLoad = buildTrailEndpoints;
+endpointsCb.addEventListener('change', refreshEndpointVisibility);
+usgsTrailSpec.cb.addEventListener('change', refreshEndpointVisibility);
+map.on('zoomend', refreshEndpointVisibility);
+
+const usgsTrailLayer = usgsTrailSpec.layer; // referenced by state navigation
+const trailGroup = makeGroup('trail-status', [usgsTrailSpec, runTrailSpec, mtbTrailSpec], info => {
+  if (info.notes.length) return ['· zoom in to load', 'error'];
+  return info.total >= 1500 ? [`· ${info.total}+ (zoom in)`, 'error'] : [`· ${info.total} trails`, ''];
+});
+
+// ---- POINTS OF INTEREST group: USGS National Map structures (national point data) ----
+const STRUCT_URL = 'https://carto.nationalmap.gov/arcgis/rest/services/structures/MapServer';
+const POI_FIELDS = 'NAME,ADDRESS,CITY,STATE';
+function poiSpec(toggle, kind, layerId, color) {
+  return makeOverlay({
+    toggle, minZoom: 12, cap: 1000, zoomNote: 'zoom in to load',
+    sources: [{ url: `${STRUCT_URL}/${layerId}`, outFields: POI_FIELDS }],
+    pointToLayer: (f, latlng) => L.circleMarker(latlng, {
+      radius: 5, color: '#fff', weight: 1.5, fillColor: color, fillOpacity: 0.95
+    }),
+    tooltip: a => {
+      const nm = (a.NAME && a.NAME.trim()) ? a.NAME.trim() : kind;
+      const place = [a.CITY, a.STATE].filter(Boolean).join(', ');
+      const sub = nm.toLowerCase().includes(kind.toLowerCase()) ? place : [kind, place].filter(Boolean).join(' · ');
+      return `<strong>${nm}</strong>` + (sub ? `<br><small>${sub}</small>` : '');
+    }
+  });
+}
+const poiSpecs = [
+  poiSpec('input[data-poi="th"]', 'Trailhead',      26, '#1f7a3d'),
+  poiSpec('input[data-poi="vc"]', 'Visitor Center', 31, '#2a6fb0'),
+  poiSpec('input[data-poi="rs"]', 'Ranger Station', 32, '#8a5a2b')
+];
+const poiGroup = makeGroup('poi-status', poiSpecs, info => {
+  if (info.notes.length) return ['· zoom in to load', 'error'];
+  return [`· ${info.total} sites`, ''];
+});
+
+// ---- WATER & CAMPS group: OpenStreetMap via Overpass (covers informal/dispersed sites) ----
+// The public Overpass endpoint rate-limits hard (~2 concurrent), and this group fires
+// one query per category. Serialize all Overpass calls through a global chain, retry
+// once on 429 with backoff, and fall back to a mirror endpoint.
+const OVERPASS_EPS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+let overpassChain = Promise.resolve();
+function overpassRequest(body) {
+  const run = async () => {
+    for (const ep of OVERPASS_EPS) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 20000); // don't let a hung mirror stall the chain
+          const res = await fetch(ep, { method: 'POST', body: 'data=' + encodeURIComponent(body), signal: ctrl.signal });
+          clearTimeout(timer);
+          if (res.status === 429) { await new Promise(r => setTimeout(r, 1500)); continue; }
+          if (!res.ok) break;
+          return await res.json();
+        } catch { break; } // network error / timeout -> try next mirror
+      }
+    }
+    return { elements: [] };
+  };
+  const p = overpassChain.then(run, run); // run regardless of prior outcome
+  overpassChain = p.catch(() => {});
+  return p;
+}
+// All four camp/water categories come from ONE combined Overpass query per viewport,
+// cached by bbox and shared across the layers — so panning fires a single request, not
+// four, which keeps us under the public endpoint's rate limit. Each layer filters the
+// shared result client-side for its category.
+const CAMP_CLAUSES = [
+  'node["amenity"="drinking_water"]({{bbox}});',
+  'node["natural"="spring"]({{bbox}});',
+  'node["man_made"="water_well"]({{bbox}});',
+  'node["man_made"="water_point"]({{bbox}});',
+  'nwr["tourism"="camp_site"]({{bbox}});',
+  'nwr["tourism"="caravan_site"]({{bbox}});',
+  'node["tourism"="wilderness_hut"]({{bbox}});'
+];
+let campCache = { key: null, promise: null };
+function fetchAllCamps(env, cap) {
+  if (campCache.key !== env) {
+    campCache = { key: env, promise: (async () => {
+      const [w, s, e, n] = env.split(',').map(Number);
+      const bbox = `${s},${w},${n},${e}`;                   // Overpass order: S,W,N,E
+      const body = `[out:json][timeout:25];(${CAMP_CLAUSES.map(c => c.replace('{{bbox}}', bbox)).join('')});out center ${cap};`;
+      const data = await overpassRequest(body);
+      return (data.elements || []).map(el => {
+        const lat = el.lat != null ? el.lat : el.center && el.center.lat;
+        const lon = el.lon != null ? el.lon : el.center && el.center.lon;
+        if (lat == null || lon == null) return null;
+        return { type: 'Feature', properties: el.tags || {}, geometry: { type: 'Point', coordinates: [lon, lat] } };
+      }).filter(Boolean);
+    })() };
+  }
+  return campCache.promise;
+}
+const isRV = a => a.tourism === 'caravan_site' || (a.tourism === 'camp_site' && a.caravans === 'yes');
+const isBC = a => a.tourism === 'wilderness_hut' || (a.tourism === 'camp_site' && (a.backcountry === 'yes' || a.camp_site === 'basic'));
+const CAMP_CATS = {
+  water: a => a.amenity === 'drinking_water' || a.natural === 'spring' || a.man_made === 'water_well' || a.man_made === 'water_point',
+  rv: isRV,
+  bc: isBC,
+  cg: a => a.tourism === 'camp_site' && !isRV(a) && !isBC(a)   // official, developed campgrounds
+};
+function campSpec(toggle, catKey, color, tooltip) {
+  return makeOverlay({
+    toggle, minZoom: 12, cap: 400, zoomNote: 'zoom in to load',
+    sources: [{ fetch: async (env, off, cap) => ({
+      type: 'FeatureCollection',
+      features: (await fetchAllCamps(env, cap)).filter(f => CAMP_CATS[catKey](f.properties))
+    }) }],
+    pointToLayer: (f, latlng) => L.circleMarker(latlng, {
+      radius: 5, color: '#fff', weight: 1.5, fillColor: color, fillOpacity: 0.95
+    }),
+    tooltip
+  });
+}
+const WATER_LABEL = { drinking_water: 'Drinking water', spring: 'Spring', water_well: 'Well', water_point: 'Water point' };
+const campSpecs = [
+  campSpec('input[data-camp="water"]', 'water', '#2a8fd0', a => {
+    const kind = WATER_LABEL[a.amenity] || WATER_LABEL[a.natural] || WATER_LABEL[a.man_made] || 'Water source';
+    const drink = a.drinking_water === 'no' ? ' · not potable' : (a.drinking_water === 'yes' ? ' · potable' : '');
+    return `<strong>${a.name || kind}</strong><br><small>${kind}${drink}</small>`;
+  }),
+  campSpec('input[data-camp="cg"]', 'cg', '#2e8b57', a => campTip(a, 'Campground')),
+  campSpec('input[data-camp="rv"]', 'rv', '#d98a2b', a => campTip(a, 'RV / Caravan site')),
+  campSpec('input[data-camp="bc"]', 'bc', '#8a5a2b',
+    a => campTip(a, a.tourism === 'wilderness_hut' ? 'Wilderness hut' : 'Backcountry / dispersed'))
+];
+function campTip(a, label) {
+  const bits = [];
+  if (a.fee === 'no') bits.push('free'); else if (a.fee === 'yes') bits.push('fee');
+  if (a.tents === 'yes') bits.push('tents');
+  if (a.reservation) bits.push('reservation: ' + a.reservation);
+  if (a.capacity) bits.push(a.capacity + ' sites');
+  if (a.operator) bits.push(a.operator);
+  return `<strong>${a.name || label}</strong><br><small>${label}` + (bits.length ? ' · ' + bits.join(' · ') : '') + '</small>';
+}
+const campGroup = makeGroup('camp-status', campSpecs, info => {
+  if (info.notes.length) return ['· zoom in to load', 'error'];
+  return [`· ${info.total} sites`, ''];
+});
+
+// ---- OFF-ROAD / OHV group: drivable tracks from OSM, graded by tracktype / 4WD tags ----
+// Ways carry geometry, so request `out geom` and build LineStrings (not points).
+async function fetchOverpassLines(clauses, env, cap) {
+  const [w, s, e, n] = env.split(',').map(Number);
+  const bbox = `${s},${w},${n},${e}`;
+  const body = `[out:json][timeout:25];(${clauses.map(c => c.replace('{{bbox}}', bbox)).join('')});out geom ${cap};`;
+  const data = await overpassRequest(body);
+  return (data.elements || []).map(el => {
+    if (!el.geometry || el.geometry.length < 2) return null;
+    return { type: 'Feature', properties: el.tags || {}, geometry: { type: 'LineString', coordinates: el.geometry.map(g => [g.lon, g.lat]) } };
+  }).filter(Boolean);
+}
+// tracktype grade1 (firm) → grade5 (barely passable); 4wd_only / rough smoothness = hard.
+function offroadDifficulty(t) {
+  if (t['4wd_only'] === 'yes') return 'hard';
+  if (t.tracktype === 'grade4' || t.tracktype === 'grade5') return 'hard';
+  if (['very_bad', 'horrible', 'very_horrible', 'impassable'].includes(t.smoothness)) return 'hard';
+  if (t.tracktype === 'grade3' || t.smoothness === 'bad') return 'moderate';
+  if (t.tracktype === 'grade1' || t.tracktype === 'grade2') return 'easy';
+  return 'moderate'; // ungraded track — assume some clearance needed
+}
+let offroadCache = { key: null, promise: null };
+function fetchOffroad(env, cap) {
+  if (offroadCache.key !== env) {
+    offroadCache = { key: env, promise: fetchOverpassLines(
+      ['way["highway"="track"]({{bbox}});', 'way["4wd_only"="yes"]({{bbox}});'], env, cap) };
+  }
+  return offroadCache.promise;
+}
+const RIG_HINT = { easy: 'AWD/stock SUV ok', moderate: 'High-clearance 4x4', hard: 'Built 4x4 / OHV' };
+const offroadSpec = makeOverlay({
+  toggle: 'input[data-offroad="ohv"]', minZoom: 12, cap: 700, zoomNote: 'zoom in to load',
+  style: f => ({ color: diffColors[offroadDifficulty(f.properties)], weight: 2.5, opacity: 0.9, dashArray: '5,4' }),
+  sources: [{ fetch: async (env, off, cap) => ({ type: 'FeatureCollection', features: await fetchOffroad(env, cap) }) }],
+  onClick: (props, latlng) => showOffroad(props, latlng),
+  tooltip: a => {
+    const diff = offroadDifficulty(a);
+    const bits = [diff + ' · ' + RIG_HINT[diff], a.tracktype && a.tracktype.replace('grade', 'grade '), a.surface, a.smoothness].filter(Boolean);
+    return `<strong>${a.name || a.ref || '4x4 / OHV track'}</strong><br><small>${bits.join(' · ')}</small>`;
+  }
+});
+const offroadGroup = makeGroup('offroad-status', [offroadSpec], info => {
+  if (info.notes.length) return ['· zoom in to load', 'error'];
+  return [`· ${info.total} tracks`, ''];
+});
+
+// ---- drive all groups on pan/zoom (debounced) ----
+const groups = [landGroup, cadGroup, trailGroup, poiGroup, campGroup, offroadGroup];
+let moveTimer;
+map.on('moveend', () => { clearTimeout(moveTimer); moveTimer = setTimeout(() => groups.forEach(loadGroup), 350); });
+groups.forEach(loadGroup);
+
+// ---------- Trails (per region) ----------
+const regions = {
+  superstition: {
+    label: 'Superstition Mtns, AZ',
+    center: [33.43, -111.42], zoom: 12,
+    trails: [
+      { name: 'Treasure Loop Trail',     diff: 'easy',     lat: 33.4612, lon: -111.4793, length: '2.4 mi', gain: '500 ft',   time: '1.3 h', land: 'State Park',
+        desc: 'Popular loop in Lost Dutchman State Park beneath the Flatiron, with classic views of the Superstition cliffs and spring wildflowers.' },
+      { name: 'Siphon Draw to Flatiron', diff: 'hard',     lat: 33.4607, lon: -111.4789, length: '5.8 mi', gain: '2,800 ft', time: '5.5 h', land: 'Wilderness',
+        desc: 'Brutal scramble up Siphon Draw to the Flatiron summit. Steep slickrock and Class 3 climbing near the top; no shade, carry ample water.' },
+      { name: 'Peralta Trail',           diff: 'moderate', lat: 33.3968, lon: -111.3483, length: '4.6 mi', gain: '1,400 ft', time: '3 h',   land: 'Wilderness',
+        desc: 'Climbs Peralta Canyon to Fremont Saddle and the iconic view of Weavers Needle. The most famous hike in the range.' },
+      { name: 'Hieroglyphic Trail',      diff: 'moderate', lat: 33.3922, lon: -111.4243, length: '2.8 mi', gain: '650 ft',   time: '2 h',   land: 'Wilderness',
+        desc: 'Gentle desert approach to a canyon pool ringed by Hohokam petroglyphs. Busy on weekends; start early.' },
+      { name: 'Wave Cave Trail',         diff: 'moderate', lat: 33.3846, lon: -111.4030, length: '3.1 mi', gain: '900 ft',   time: '2.3 h', land: 'Wilderness',
+        desc: 'Short steep climb to a wind-carved cave that frames a perfect "wave." Loose final pitch; hands needed near the top.' },
+      { name: 'First Water / Dutchman',  diff: 'moderate', lat: 33.4792, lon: -111.4443, length: '6.2 mi', gain: '750 ft',   time: '3.5 h', land: 'Wilderness',
+        desc: 'Rolling desert loop from the First Water trailhead through saguaro flats and washes — a gateway into the Dutchman backcountry.' },
+      { name: 'Massacre Grounds Trail',  diff: 'moderate', lat: 33.4731, lon: -111.4571, length: '4.2 mi', gain: '1,100 ft', time: '2.8 h', land: 'National Forest',
+        desc: 'Quiet route toward a seasonal waterfall below the cliffs, steeped in Lost Dutchman lore. Faint tread past the falls junction.' },
+      { name: 'Lost Goldmine Trail',     diff: 'easy',     lat: 33.3869, lon: -111.4481, length: '5.0 mi', gain: '450 ft',   time: '2.5 h', land: 'Private',
+        desc: 'Mostly level trail tracing the southern base of the range across an easement corridor. Big views with little climbing.' }
+    ]
+  },
+  salida: {
+    label: 'Salida, CO',
+    center: [38.535, -105.998], zoom: 12,
+    trails: [
+      { name: 'Riverside Loop',        diff: 'easy',     lat: 38.605, lon: -106.045, length: '2.8 mi', gain: '210 ft',   time: '1.2 h', land: 'State Park',
+        desc: 'Gentle riverside loop along the Arkansas corridor. Great for families; mostly flat with picnic spots.' },
+      { name: 'Pinyon Bluffs Trail',   diff: 'easy',     lat: 38.520, lon: -106.235, length: '3.5 mi', gain: '380 ft',   time: '1.7 h', land: 'BLM',
+        desc: 'Open pinyon-juniper country with broad valley views. Exposed — bring sun protection.' },
+      { name: 'Aspen Vista Trail',     diff: 'moderate', lat: 38.660, lon: -105.960, length: '6.1 mi', gain: '1,450 ft', time: '3.5 h', land: 'National Forest',
+        desc: 'Switchbacks through aspen groves to a ridgeline overlook. Spectacular in late September.' },
+      { name: 'Granite Creek Trail',   diff: 'moderate', lat: 38.555, lon: -105.905, length: '7.4 mi', gain: '1,820 ft', time: '4 h',   land: 'National Forest',
+        desc: 'Follows a tumbling creek past granite outcrops. Several crossings — poles recommended in early summer.' },
+      { name: 'Cottonwood Flats',      diff: 'easy',     lat: 38.675, lon: -106.110, length: '1.9 mi', gain: '120 ft',   time: '0.8 h', land: 'BLM',
+        desc: 'Short, level walk through cottonwood bottomland. Good birding at dawn.' },
+      { name: 'Summit Ridge Traverse', diff: 'hard',     lat: 38.720, lon: -106.330, length: '11.2 mi', gain: '3,950 ft', time: '8 h',  land: 'Wilderness',
+        desc: 'Strenuous above-treeline traverse with sustained exposure and route-finding. Alpine start advised; afternoon storms common.' },
+      { name: 'Cirque Lake Climb',     diff: 'hard',     lat: 38.650, lon: -106.385, length: '9.6 mi', gain: '3,200 ft', time: '6.5 h', land: 'Wilderness',
+        desc: 'Steep climb to a glacial cirque lake at 12,100 ft. Talus near the top; sturdy boots essential.' },
+      { name: 'Overlook Spur',         diff: 'moderate', lat: 38.585, lon: -106.020, length: '4.3 mi', gain: '980 ft',   time: '2.3 h', land: 'State Park',
+        desc: 'Climbs from the river canyon to a rim overlook of the Sawatch Range. Rocky tread in the upper half.' }
+    ]
+  }
+};
+
+const diffColors = { easy: '#2e8b57', moderate: '#2a6fb0', hard: '#c0392b' };
+
+const detail = document.getElementById('detail');
+const addPlanBtn = document.getElementById('d-add-plan');
+let currentTrail = null; // the curated trail shown in the panel (null for USGS lines)
+
+// AR launch — points the live camera toward the shown trail's location.
+const arBtn = document.getElementById('d-ar');
+function updateArBtn() {
+  const ok = currentTrail && currentTrail.lat != null && currentTrail.lon != null;
+  arBtn.style.display = ok ? '' : 'none';
+}
+arBtn.addEventListener('click', () => {
+  if (!currentTrail || currentTrail.lat == null) return;
+  window.openTrailMarkerAR({
+    latitude: +currentTrail.lat, longitude: +currentTrail.lon,
+    label: currentTrail.name || 'Trail',
+    onArrive: () => console.log('arrived at', currentTrail.name)
+  });
+});
+
+function setStatLabels(length, gain, time, land) {
+  document.getElementById('d-label-length').textContent = length;
+  document.getElementById('d-label-gain').textContent   = gain;
+  document.getElementById('d-label-time').textContent   = time;
+  document.getElementById('d-label-land').textContent   = land;
+}
+
+function showTrail(t) {
+  document.getElementById('d-name').textContent = t.name;
+  const badge = document.getElementById('d-diff');
+  badge.textContent = t.diff; badge.style.background = diffColors[t.diff]; badge.style.display = '';
+  setStatLabels('Length', 'Elev. Gain', 'Est. Time', 'Land');
+  document.getElementById('d-length').textContent = t.length;
+  document.getElementById('d-gain').textContent   = t.gain;
+  document.getElementById('d-time').textContent   = t.time;
+  document.getElementById('d-land').textContent   = t.land;
+  document.getElementById('d-desc').textContent   = t.desc;
+  document.getElementById('d-directions').href =
+    `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&to=${t.lat}%2C${t.lon}#map=13/${t.lat}/${t.lon}`;
+  currentTrail = t;
+  addPlanBtn.style.display = '';
+  syncAddBtn();
+  updateArBtn();
+  detail.classList.add('open');
+}
+
+function showUsgsTrail(props, latlng) {
+  const name = props.name || 'Unnamed Trail';
+  const lenMi = props.lengthmiles ? +props.lengthmiles : null;
+  const diff = estDifficulty(props.lengthmiles);
+  document.getElementById('d-name').textContent = name;
+  const badge = document.getElementById('d-diff');
+  badge.textContent = diff + ' (est.)'; badge.style.background = diffColors[diff]; badge.style.display = '';
+  setStatLabels('Length', 'Surface', 'Uses', 'Maintainer');
+  document.getElementById('d-length').textContent = lenMi ? `${lenMi.toFixed(1)} mi` : '—';
+  document.getElementById('d-gain').textContent   = props.trailsurface || '—';
+  const uses = [props.hikerpedestrian === 'Y' && 'Hiking', props.bicycle === 'Y' && 'Bike',
+                props.packsaddle === 'Y' && 'Horse'].filter(Boolean).join(', ');
+  document.getElementById('d-time').textContent   = uses || '—';
+  document.getElementById('d-land').textContent   = props.primarytrailmaintainer || '—';
+  document.getElementById('d-desc').textContent   =
+    props.nationaltraildesignation ? props.nationaltraildesignation + ' · difficulty estimated from length' : 'Difficulty estimated from length (no elevation in USGS data).';
+  const lat = +latlng.lat.toFixed(5), lng = +latlng.lng.toFixed(5);
+  document.getElementById('d-directions').href =
+    `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&to=${lat}%2C${lng}#map=14/${lat}/${lng}`;
+  // Plan-able: elevation is unknown, so leave gain blank and estimate time at ~2 mph.
+  currentTrail = {
+    name, diff, lat, lon: lng,
+    length: lenMi ? lenMi.toFixed(1) + ' mi' : '—',
+    gain: '—',
+    time: lenMi ? (lenMi / 2).toFixed(1) + ' h (est.)' : '—',
+    land: props.primarytrailmaintainer || 'USGS',
+    desc: ''
+  };
+  addPlanBtn.style.display = '';
+  syncAddBtn();
+  updateArBtn();
+  detail.classList.add('open');
+}
+function showOffroad(props, latlng) {
+  currentTrail = null;
+  addPlanBtn.style.display = 'none'; // off-road tracks aren't hiking-plan items
+  const diff = offroadDifficulty(props);
+  document.getElementById('d-name').textContent = props.name || props.ref || '4x4 / OHV Track';
+  const badge = document.getElementById('d-diff');
+  badge.textContent = diff + ' · 4x4'; badge.style.background = diffColors[diff]; badge.style.display = '';
+  setStatLabels('Rig', 'Surface', 'Track grade', 'Access');
+  document.getElementById('d-length').textContent = RIG_HINT[diff];
+  document.getElementById('d-gain').textContent   = props.surface || '—';
+  document.getElementById('d-time').textContent   = props.tracktype ? props.tracktype.replace('grade', 'grade ') : (props.smoothness || '—');
+  document.getElementById('d-land').textContent   = props['4wd_only'] === 'yes' ? '4WD only' : (props.motor_vehicle || props.access || 'open');
+  document.getElementById('d-desc').textContent   = 'Vehicle track from OpenStreetMap. Difficulty is estimated from track grade / surface tags — scout conditions before committing.';
+  const lat = +latlng.lat.toFixed(5), lng = +latlng.lng.toFixed(5);
+  document.getElementById('d-directions').href =
+    `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&to=${lat}%2C${lng}#map=14/${lat}/${lng}`;
+  updateArBtn();
+  detail.classList.add('open');
+}
+
+document.getElementById('detail-close').addEventListener('click', () => detail.classList.remove('open'));
+
+// ---------- Trip Planner ----------
+// A plan is a list of curated trail objects, persisted on this device. Totals are
+// derived by parsing the human stat strings ("2.4 mi", "2,800 ft", "1.3 h").
+const PLAN_KEY = 'trailapp.plan.v1';
+let plan = [];
+try { plan = JSON.parse(localStorage.getItem(PLAN_KEY)) || []; } catch { plan = []; }
+
+const trailKey = t => `${t.name}@${t.lat},${t.lon}`;
+const num = s => parseFloat(String(s || '').replace(/,/g, '')) || 0;
+const inPlan = t => plan.some(p => trailKey(p) === trailKey(t));
+
+function savePlan() { try { localStorage.setItem(PLAN_KEY, JSON.stringify(plan)); } catch {} }
+
+function syncAddBtn() {
+  if (!currentTrail) return;
+  const added = inPlan(currentTrail);
+  addPlanBtn.classList.toggle('added', added);
+  addPlanBtn.textContent = added ? '✓ In Plan — remove' : '＋ Add to Plan';
+}
+
+function togglePlan(t) {
+  const k = trailKey(t);
+  if (inPlan(t)) plan = plan.filter(p => trailKey(p) !== k);
+  else plan.push(t);
+  savePlan();
+  syncAddBtn();
+  renderPlanner();
+}
+addPlanBtn.addEventListener('click', () => { if (currentTrail) togglePlan(currentTrail); });
+
+function renderPlanner() {
+  const list = document.getElementById('plan-list');
+  document.querySelector('nav button[data-tab="planner"]').textContent =
+    plan.length ? `Planner (${plan.length})` : 'Planner';
+
+  const dist = plan.reduce((n, t) => n + num(t.length), 0);
+  const gain = plan.reduce((n, t) => n + num(t.gain), 0);
+  const time = plan.reduce((n, t) => n + num(t.time), 0);
+  document.getElementById('pt-count').textContent = plan.length;
+  document.getElementById('pt-dist').textContent = `${dist.toFixed(1)} mi`;
+  document.getElementById('pt-gain').textContent = `${gain.toLocaleString()} ft`;
+  document.getElementById('pt-time').textContent = `${time.toFixed(1)} h`;
+
+  // Multi-stop directions across every trailhead (Google Maps handles N waypoints).
+  const dirBtn = document.getElementById('plan-directions');
+  if (plan.length) {
+    dirBtn.href = 'https://www.google.com/maps/dir/' + plan.map(t => `${t.lat},${t.lon}`).join('/');
+    dirBtn.style.display = '';
+  } else {
+    dirBtn.style.display = 'none';
+  }
+
+  renderTripKit(); // gear / hazards / rig reflect the plan (or map view when empty)
+
+  if (!plan.length) {
+    list.innerHTML = '<div class="plan-empty">No trails yet — click a trailhead marker on the map and choose “Add to Plan”.</div>';
+    return;
+  }
+  list.innerHTML = '';
+  plan.forEach(t => {
+    const row = document.createElement('div');
+    row.className = 'plan-item';
+    row.innerHTML =
+      `<span class="pi-bar" style="background:${diffColors[t.diff] || '#999'}"></span>` +
+      `<div class="pi-main"><div class="pi-name">${t.name}</div>` +
+      `<div class="pi-meta">${[t.length, t.gain, t.time, t.land].filter(Boolean).join(' · ')}</div></div>` +
+      `<button class="pi-remove" title="Remove">✕</button>`;
+    row.querySelector('.pi-name').addEventListener('click', () => {
+      document.querySelector('nav button[data-tab="map"]').click();
+      map.setView([t.lat, t.lon], 14);
+      showTrail(t);
+    });
+    row.querySelector('.pi-remove').addEventListener('click', () => togglePlan(t));
+    list.appendChild(row);
+  });
+}
+
+document.getElementById('plan-clear').addEventListener('click', () => {
+  if (!plan.length) return;
+  plan = []; savePlan(); syncAddBtn(); renderPlanner();
+});
+
+// ---------- Trip Kit: hike type → gear, regional hazards, vehicle/rig ----------
+const HIKE_TYPES = [
+  { key: 'day',      label: 'Day Hike' },
+  { key: 'backpack', label: 'Backpacking' },
+  { key: 'peak',     label: 'Peak Bagging' },
+  { key: 'run',      label: 'Trail Running' },
+  { key: 'offroad',  label: 'Off-Road / Overland' }
+];
+const GEAR_BASE = ['Navigation: map, compass + GPS', 'Water + filter/treatment', 'Extra food / snacks',
+  'Rain shell', 'Sun protection (hat, SPF, shades)', 'First-aid kit', 'Headlamp + spare batteries',
+  'Knife / multitool', 'Whistle + emergency blanket', 'Charged phone / PLB'];
+const GEAR_BY_TYPE = {
+  day:      ['Daypack (15–25 L)', 'Insulating layer', 'Trekking poles (optional)'],
+  backpack: ['Backpack (50–65 L)', 'Tent / shelter', 'Sleeping bag + pad', 'Stove, fuel + cookware',
+             'Bear canister / food hang', '3–4 L water capacity', 'Repair kit + duct tape', 'Camp/extra clothing'],
+  peak:     ['Helmet (Class 3+ scramble)', 'Gloves', 'Microspikes / crampons (snow)', 'Ice axe (snowfields)',
+             'Extra summit insulation', 'Pre-dawn alpine start plan'],
+  run:      ['Trail-running shoes', 'Hydration vest', 'Lightweight wind shell', 'Electrolytes / gels', 'Minimal first-aid'],
+  offroad:  ['Recovery gear (straps, shackles)', 'Traction boards', 'Air compressor + gauge', 'Full-size spare',
+             'Hi-lift / floor jack + base', 'GMRS/CB radio', 'Offline maps + paper backup', 'Extra fuel + water']
+};
+// Coarse continental-US eco-region from coordinates -> drives the hazard list.
+function ecoRegion(lat, lon) {
+  if (lon > -90 && lat < 31) return 'southeast';                 // Gulf / Florida
+  if (lon < -118 && lat < 42) return 'pacific';                  // coastal CA / PNW
+  if (lat < 37 && lon > -118 && lon < -103) return 'desert';     // Sonoran / Chihuahuan
+  if (lat < 37 && lon <= -114) return 'desert';                  // Mojave
+  if (lon <= -103) return 'mountain';                            // Rockies / Great Basin / Sierra
+  return 'eastern';                                              // Eastern woodlands
+}
+const REGION_LABEL = { desert: 'Desert SW', mountain: 'Mountain West', pacific: 'Pacific NW / Coast', eastern: 'Eastern Woodlands', southeast: 'Southeast / Gulf' };
+const HAZARDS = {
+  desert: {
+    plant: ['Cholla & prickly-pear cactus', 'Catclaw acacia', 'Poison ivy (canyon seeps)'],
+    animal: ['Rattlesnakes', 'Scorpions', 'Gila monster', 'Africanized bees', 'Black widow'],
+    cond: ['Extreme heat / dehydration', 'Flash floods in washes', 'No shade', 'Cold desert nights'] },
+  mountain: {
+    plant: ['Poison ivy (low elevs)', 'Stinging nettle'],
+    animal: ['Black bears', 'Mountain lions', 'Moose', 'Ticks', 'Rattlesnakes (foothills)'],
+    cond: ['Afternoon lightning', 'Altitude sickness', 'Fast weather swings', 'Snowfields', 'Hypothermia'] },
+  pacific: {
+    plant: ['Poison oak', 'Stinging nettle', 'Devil’s club'],
+    animal: ['Black bears', 'Cougars', 'Ticks', 'Rattlesnakes (dry interior)'],
+    cond: ['Wet-cold hypothermia', 'River crossings', 'Fog / low visibility', 'Coastal tides'] },
+  eastern: {
+    plant: ['Poison ivy', 'Poison sumac', 'Poison oak', 'Giant hogweed (burns)'],
+    animal: ['Ticks (Lyme)', 'Timber rattlers', 'Copperheads', 'Black bears', 'Black flies'],
+    cond: ['Heat & humidity', 'Thunderstorms', 'Slick rock & roots'] },
+  southeast: {
+    plant: ['Poison ivy', 'Poison sumac', 'Saw palmetto'],
+    animal: ['Alligators', 'Cottonmouth', 'Coral snakes', 'Fire ants', 'Mosquitoes (disease)', 'Ticks'],
+    cond: ['Heat & humidity', 'Sudden storms', 'Standing water / sinkholes'] }
+};
+const RIG = {
+  easy:     { rig: 'Stock SUV / AWD crossover', tires: 'All-season or light A/T',
+    needs: ['Graded dirt & gravel', '2WD usually fine when dry', 'Carry a basic tool & tire kit'] },
+  moderate: { rig: 'High-clearance 4x4 (low range helps)', tires: 'All-terrain (A/T)',
+    needs: ['8.5"+ ground clearance', 'Skid plates recommended', 'Recovery strap + shovel', 'Air down on rough sections'] },
+  hard:     { rig: 'Built 4x4 — lockers, low range, 33"+ tires', tires: 'Mud-terrain (M/T) or aggressive A/T',
+    needs: ['Front/rear lockers or LSD', 'Skid plates & rock sliders', 'Winch + full recovery kit', 'Onboard air, spotter', 'Travel with a second vehicle'] }
+};
+const DIFF_RANK = { easy: 0, moderate: 1, hard: 2 };
+const RANK_DIFF = ['easy', 'moderate', 'hard'];
+
+// Permits: detect which managing agencies apply from the plan's land types, then link
+// to the official portal for each. There's no universal permit API, so these deep-link
+// to the real reservation/permit systems pre-filtered to the area where possible.
+function planLandKeys() {
+  const keys = new Set();
+  plan.forEach(t => {
+    const l = (t.land || '').toLowerCase();
+    if (l.includes('national park') || l.includes('nps')) keys.add('nps');
+    if (l.includes('wilderness')) keys.add('wild');
+    if (l.includes('forest') || l.includes('usfs')) keys.add('usfs');
+    if (l.includes('blm')) keys.add('blm');
+    if (l.includes('state')) keys.add('state');
+  });
+  return keys;
+}
+function permitArea() { // nearest state flagship to the plan center, for naming + search
+  const [lat, lon] = planCenter();
+  let best = null, bd = Infinity;
+  STATES.forEach(s => { const d = (s[2] - lat) ** 2 + (s[3] - lon) ** 2; if (d < bd) { bd = d; best = s; } });
+  return best ? { name: best[5], state: best[1], abbr: best[0] } : { name: '', state: '', abbr: '' };
+}
+// Official state-park system / reservation portal for each state.
+const STATE_PARKS = {
+  AL: 'https://www.alapark.com/', AK: 'https://dnr.alaska.gov/parks/', AZ: 'https://azstateparks.com/',
+  AR: 'https://www.arkansasstateparks.com/', CA: 'https://www.reservecalifornia.com/', CO: 'https://cpw.state.co.us/places-to-go',
+  CT: 'https://portal.ct.gov/deep/state-parks/state-parks', DE: 'https://destateparks.com/', FL: 'https://www.floridastateparks.org/',
+  GA: 'https://gastateparks.org/', HI: 'https://dlnr.hawaii.gov/dsp/', ID: 'https://parksandrecreation.idaho.gov/',
+  IL: 'https://dnr.illinois.gov/parks.html', IN: 'https://www.in.gov/dnr/state-parks/', IA: 'https://www.iowadnr.gov/places-to-go/state-parks',
+  KS: 'https://ksoutdoors.com/State-Parks', KY: 'https://parks.ky.gov/', LA: 'https://www.lastateparks.com/',
+  ME: 'https://www.maine.gov/dacf/parks/', MD: 'https://dnr.maryland.gov/publiclands/pages/parks.aspx',
+  MA: 'https://www.mass.gov/state-parks', MI: 'https://www.michigan.gov/dnr/places/state-parks',
+  MN: 'https://www.dnr.state.mn.us/state_parks/index.html', MS: 'https://www.mdwfp.com/parks-destinations/',
+  MO: 'https://mostateparks.com/', MT: 'https://fwp.mt.gov/stateparks', NE: 'https://outdoornebraska.gov/stateparks/',
+  NV: 'https://parks.nv.gov/', NH: 'https://www.nhstateparks.org/', NJ: 'https://dep.nj.gov/njforestandparks/',
+  NM: 'https://www.emnrd.nm.gov/spd/', NY: 'https://parks.ny.gov/', NC: 'https://www.ncparks.gov/',
+  ND: 'https://www.parkrec.nd.gov/', OH: 'https://ohiodnr.gov/go-and-do/plan-a-visit/find-a-property/state-parks',
+  OK: 'https://www.travelok.com/state-parks', OR: 'https://stateparks.oregon.gov/', PA: 'https://www.dcnr.pa.gov/StateParks/',
+  RI: 'https://riparks.ri.gov/', SC: 'https://southcarolinaparks.com/', SD: 'https://gfp.sd.gov/parks/',
+  TN: 'https://tnstateparks.com/', TX: 'https://tpwd.texas.gov/state-parks', UT: 'https://stateparks.utah.gov/',
+  VT: 'https://vtstateparks.com/', VA: 'https://www.dcr.virginia.gov/state-parks/', WA: 'https://www.parks.wa.gov/',
+  WV: 'https://wvstateparks.com/', WI: 'https://dnr.wisconsin.gov/topic/parks', WY: 'https://wyoparks.wyo.gov/'
+};
+const rg = q => 'https://www.recreation.gov/search?q=' + encodeURIComponent(q);
+const PERMIT_LINKS = {
+  recgov: a => ({ title: 'Recreation.gov', desc: 'Reserve campsites, permits, timed-entry & lottery hikes on all federal lands', url: rg(a.name || a.state) }),
+  atb:    () => ({ title: 'America the Beautiful Pass', desc: '$80/yr — covers entrance & day-use fees at NPS, USFS, BLM, USFWS & BOR sites', url: 'https://store.usgs.gov/recreational-passes' }),
+  nps:    () => ({ title: 'National Park Service', desc: 'Park entry, timed-entry reservations & backcountry/wilderness permits', url: 'https://www.nps.gov/findapark/index.htm' }),
+  wild:   a => ({ title: 'Wilderness Permit', desc: 'Many wilderness areas require a day-use or overnight permit (often quota/lottery)', url: rg((a.name || '') + ' wilderness permit') }),
+  usfs:   () => ({ title: 'US Forest Service', desc: 'Day-use/parking passes, campfire permits & dispersed-camping rules', url: 'https://www.fs.usda.gov/visit/passes-permits' }),
+  blm:    () => ({ title: 'Bureau of Land Management', desc: 'Mostly free; some areas need a Special Recreation Permit or visitor permit', url: 'https://www.blm.gov/programs/recreation/permits-and-passes' }),
+  state:  a => ({ title: `${a.state || 'State'} State Parks`, desc: 'Day-use & camping reservations on the official state-park portal', url: STATE_PARKS[a.abbr] || 'https://www.reserveamerica.com/' }),
+  ohv:    () => ({ title: 'OHV Registration / Sticker', desc: 'Off-road vehicles typically need a state OHV registration or sticker to ride legally', url: 'https://www.blm.gov/programs/recreation/recreation-activities/off-highway-vehicles' })
+};
+
+// Trip-kit persisted state
+let tripType = 'day', gearChecked = {};
+try { tripType = localStorage.getItem('trailapp.triptype') || 'day'; } catch {}
+try { gearChecked = JSON.parse(localStorage.getItem('trailapp.gear')) || {}; } catch { gearChecked = {}; }
+
+function planCenter() {
+  if (plan.length) return [plan.reduce((s, t) => s + t.lat, 0) / plan.length, plan.reduce((s, t) => s + t.lon, 0) / plan.length];
+  const c = map.getCenter(); return [c.lat, c.lng];
+}
+function planDifficulty() {
+  if (!plan.length) return 'moderate';
+  return RANK_DIFF[Math.max(...plan.map(t => DIFF_RANK[t.diff] ?? 1))];
+}
+
+function renderTripKit() {
+  // type chips
+  const typesEl = document.getElementById('kit-types');
+  typesEl.innerHTML = '';
+  HIKE_TYPES.forEach(t => {
+    const b = document.createElement('button');
+    b.className = 'kit-type' + (t.key === tripType ? ' active' : '');
+    b.textContent = t.label;
+    b.addEventListener('click', () => {
+      tripType = t.key;
+      try { localStorage.setItem('trailapp.triptype', tripType); } catch {}
+      renderTripKit();
+    });
+    typesEl.appendChild(b);
+  });
+
+  // gear checklist
+  const gear = GEAR_BASE.concat(GEAR_BY_TYPE[tripType] || []);
+  document.getElementById('kit-gear-tag').textContent = HIKE_TYPES.find(t => t.key === tripType).label;
+  const gearEl = document.getElementById('kit-gear');
+  gearEl.innerHTML = '';
+  gear.forEach(item => {
+    const id = 'g_' + item.replace(/\W+/g, '_');
+    const row = document.createElement('label');
+    row.className = 'gear-row';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.checked = !!gearChecked[item];
+    cb.addEventListener('change', () => { gearChecked[item] = cb.checked; try { localStorage.setItem('trailapp.gear', JSON.stringify(gearChecked)); } catch {} });
+    const span = document.createElement('span'); span.textContent = item;
+    row.append(cb, span);
+    gearEl.appendChild(row);
+  });
+
+  // hazards by region
+  const [lat, lon] = planCenter();
+  const region = ecoRegion(lat, lon);
+  document.getElementById('kit-region').textContent = REGION_LABEL[region];
+  const h = HAZARDS[region];
+  document.getElementById('kit-hazards').innerHTML =
+    hazGroup('Plants', h.plant, 'plant') + hazGroup('Animals', h.animal, '') + hazGroup('Conditions', h.cond, 'cond');
+
+  // vehicle / rig by terrain difficulty
+  const diff = planDifficulty();
+  document.getElementById('kit-terrain').textContent = diff[0].toUpperCase() + diff.slice(1) + ' terrain';
+  const r = RIG[diff];
+  document.getElementById('kit-rig').innerHTML =
+    `<div class="rig-line"><span class="rl-lab">Recommended:</span> <strong>${r.rig}</strong></div>` +
+    `<div class="rig-line"><span class="rl-lab">Tires:</span> ${r.tires}</div>` +
+    `<ul class="rig-list">${r.needs.map(x => `<li>${x}</li>`).join('')}</ul>`;
+
+  // permits & passes — central portals + agency-specific links for the plan's land types
+  const a = permitArea(), keys = planLandKeys();
+  document.getElementById('kit-permit-area').textContent = a.name || '';
+  const permits = [PERMIT_LINKS.recgov(a), PERMIT_LINKS.atb(a)];
+  if (keys.has('nps')) permits.push(PERMIT_LINKS.nps(a));
+  if (keys.has('wild')) permits.push(PERMIT_LINKS.wild(a));
+  if (keys.has('usfs')) permits.push(PERMIT_LINKS.usfs(a));
+  if (keys.has('blm')) permits.push(PERMIT_LINKS.blm(a));
+  if (keys.has('state')) permits.push(PERMIT_LINKS.state(a));
+  if (!keys.size) permits.push(PERMIT_LINKS.nps(a), PERMIT_LINKS.usfs(a), PERMIT_LINKS.blm(a)); // generic refs when no plan
+  if (tripType === 'offroad') permits.push(PERMIT_LINKS.ohv(a));
+  document.getElementById('kit-permits').innerHTML = permits.map(p =>
+    `<div class="permit-row"><div class="permit-main"><div class="permit-title">${p.title}</div>` +
+    `<div class="permit-desc">${p.desc}</div></div>` +
+    `<a class="permit-link" href="${p.url}" target="_blank" rel="noopener">Open ↗</a></div>`).join('');
+}
+function hazGroup(title, items, cls) {
+  return `<div class="haz-group"><div class="haz-h">${title}</div><div class="haz-list">` +
+    items.map(i => `<span class="haz-chip ${cls}">${i}</span>`).join('') + '</div></div>';
+}
+// Refresh region from the map view when opening the Planner with an empty plan.
+document.querySelector('nav button[data-tab="planner"]').addEventListener('click', renderTripKit);
+// Initial renderPlanner() is called at the end of the script — permitArea() needs STATES.
+
+const trailLayer = L.layerGroup().addTo(map);
+function renderTrails(list) {
+  trailLayer.clearLayers();
+  list.forEach(t => {
+    const icon = L.divIcon({
+      className: '',
+      html: `<div class="trail-marker" style="background:${diffColors[t.diff]}"></div>`,
+      iconSize: [18, 18],
+      iconAnchor: [9, 18]
+    });
+    L.marker([t.lat, t.lon], { icon, title: t.name })
+      .addTo(trailLayer)
+      .bindTooltip(t.name)
+      .on('click', () => showTrail(t));
+  });
+}
+
+// ---------- Region switching ----------
+const regionSelect = document.getElementById('region-select');
+function goToRegion(key) {
+  const r = regions[key];
+  if (!r) return;
+  detail.classList.remove('open');
+  renderTrails(r.trails);
+  regionSelect.value = 'region:' + key;          // keep dropdown in sync
+  map.setView(r.center, r.zoom);                 // triggers moveend -> data refetch
+}
+
+// Initial region (matches the select's default).
+renderTrails(regions.superstition.trails);
+
+// ---------- 50-state trail directory (Trails tab) ----------
+// Each state is anchored on a flagship hiking region (real coordinates). National
+// layers (USGS trails, PAD-US land, NCED easements) load live for wherever you land.
+const STATES = [
+  ['AL','Alabama',33.485,-85.808,12,'Cheaha / Talladega NF'],
+  ['AK','Alaska',61.100,-149.680,11,'Chugach State Park'],
+  ['AZ','Arizona',33.430,-111.420,12,'Superstition Wilderness'],
+  ['AR','Arkansas',34.610,-93.060,12,'Ouachita NF / Hot Springs'],
+  ['CA','California',37.745,-119.590,12,'Yosemite Valley'],
+  ['CO','Colorado',38.535,-105.998,12,'Sawatch Range / Salida'],
+  ['CT','Connecticut',41.421,-72.900,13,'Sleeping Giant SP'],
+  ['DE','Delaware',39.740,-75.760,13,'White Clay Creek SP'],
+  ['FL','Florida',29.180,-81.700,12,'Ocala National Forest'],
+  ['GA','Georgia',34.560,-84.250,12,'Springer Mtn / Amicalola'],
+  ['HI','Hawaii',22.180,-159.620,12,'Nā Pali Coast (Kauaʻi)'],
+  ['ID','Idaho',44.140,-114.910,12,'Sawtooth Mountains'],
+  ['IL','Illinois',41.320,-88.990,13,'Starved Rock SP'],
+  ['IN','Indiana',39.180,-86.230,12,'Brown County SP'],
+  ['IA','Iowa',42.010,-93.880,13,'Ledges State Park'],
+  ['KS','Kansas',39.100,-96.610,12,'Konza Prairie / Flint Hills'],
+  ['KY','Kentucky',37.820,-83.620,12,'Red River Gorge'],
+  ['LA','Louisiana',31.060,-92.660,12,'Kisatchie NF'],
+  ['ME','Maine',44.350,-68.220,12,'Acadia NP / Cadillac Mtn'],
+  ['MD','Maryland',39.630,-77.450,12,'Catoctin Mountain'],
+  ['MA','Massachusetts',42.640,-73.160,12,'Mount Greylock'],
+  ['MI','Michigan',46.660,-86.460,12,'Pictured Rocks'],
+  ['MN','Minnesota',47.550,-90.880,11,'Superior Hiking Trail'],
+  ['MS','Mississippi',30.850,-89.000,12,'De Soto NF'],
+  ['MO','Missouri',37.570,-90.730,12,'Taum Sauk / Ozarks'],
+  ['MT','Montana',48.700,-113.720,11,'Glacier National Park'],
+  ['NE','Nebraska',42.920,-103.600,12,'Pine Ridge / Toadstool'],
+  ['NV','Nevada',36.130,-115.420,12,'Red Rock Canyon'],
+  ['NH','New Hampshire',44.160,-71.680,12,'White Mountains'],
+  ['NJ','New Jersey',41.100,-74.960,12,'Delaware Water Gap'],
+  ['NM','New Mexico',35.210,-106.450,12,'Sandia Mountains'],
+  ['NY','New York',44.160,-73.860,12,'Adirondack High Peaks'],
+  ['NC','North Carolina',35.600,-83.450,11,'Great Smoky Mountains'],
+  ['ND','North Dakota',46.970,-103.530,12,'Theodore Roosevelt NP'],
+  ['OH','Ohio',39.430,-82.540,13,'Hocking Hills SP'],
+  ['OK','Oklahoma',34.730,-98.710,12,'Wichita Mountains'],
+  ['OR','Oregon',45.370,-121.690,11,'Mount Hood / Columbia Gorge'],
+  ['PA','Pennsylvania',41.330,-76.270,12,'Ricketts Glen / Pine Creek'],
+  ['RI','Rhode Island',41.550,-71.720,13,'Arcadia Mgmt Area'],
+  ['SC','South Carolina',35.030,-82.700,12,'Table Rock SP'],
+  ['SD','South Dakota',43.860,-103.530,12,'Black Hills / Custer SP'],
+  ['TN','Tennessee',35.680,-83.530,11,'Great Smoky Mountains'],
+  ['TX','Texas',29.270,-103.300,11,'Big Bend National Park'],
+  ['UT','Utah',37.270,-112.950,12,'Zion National Park'],
+  ['VT','Vermont',44.320,-72.890,12,"Camel's Hump / Greens"],
+  ['VA','Virginia',38.530,-78.350,11,'Shenandoah NP'],
+  ['WA','Washington',46.850,-121.760,11,'Mount Rainier'],
+  ['WV','West Virginia',38.070,-81.080,12,'New River Gorge'],
+  ['WI','Wisconsin',43.430,-89.730,12,'Devil’s Lake SP'],
+  ['WY','Wyoming',43.730,-110.800,11,'Grand Teton NP']
+];
+
+function goToState(s) {
+  // s = [abbr,name,lat,lon,zoom,area]
+  detail.classList.remove('open');
+  trailLayer.clearLayers();                       // hide curated trailhead markers
+  if (!document.querySelector('input[data-trails="usgs"]').checked) {
+    const cb = document.querySelector('input[data-trails="usgs"]'); cb.checked = true; usgsTrailLayer.addTo(map);
+  }
+  document.querySelector('nav button[data-tab="map"]').click(); // switch to Map tab
+  regionSelect.value = 'state:' + s[0];           // keep dropdown in sync
+  map.setView([s[2], s[3]], s[4]);                // moveend -> land + cadastral + trails load
+}
+
+const stateGrid = document.getElementById('state-grid');
+function renderStates(filter) {
+  const q = (filter || '').toLowerCase();
+  stateGrid.innerHTML = '';
+  STATES.filter(s => !q || s[1].toLowerCase().includes(q) || s[5].toLowerCase().includes(q) || s[0].toLowerCase() === q)
+    .forEach(s => {
+      const card = document.createElement('button');
+      card.className = 'state-card';
+      card.innerHTML = `<span class="sc-name">${s[1]}<span class="sc-abbr">${s[0]}</span></span><span class="sc-area">${s[5]}</span>`;
+      card.addEventListener('click', () => goToState(s));
+      stateGrid.appendChild(card);
+    });
+}
+renderStates();
+document.getElementById('state-search').addEventListener('input', e => renderStates(e.target.value));
+
+// ---------- Populate the header dropdown (Featured + all 50 states) & keep in sync ----------
+(function populateRegionSelect() {
+  const featured = document.createElement('optgroup');
+  featured.label = 'Featured';
+  Object.entries(regions).forEach(([key, r]) => {
+    const o = document.createElement('option');
+    o.value = 'region:' + key; o.textContent = r.label;
+    featured.appendChild(o);
+  });
+  const states = document.createElement('optgroup');
+  states.label = 'States';
+  STATES.forEach(s => {
+    const o = document.createElement('option');
+    o.value = 'state:' + s[0]; o.textContent = `${s[1]} — ${s[5]}`;
+    states.appendChild(o);
+  });
+  regionSelect.append(featured, states);
+  regionSelect.value = 'region:superstition'; // matches the initial map view
+})();
+regionSelect.addEventListener('change', e => {
+  const [kind, id] = e.target.value.split(':');
+  if (kind === 'region') goToRegion(id);
+  else if (kind === 'state') { const s = STATES.find(x => x[0] === id); if (s) goToState(s); }
+});
+
+// STATES now exists, so the planner (which derives permit area from it) can render.
+renderPlanner();
+</script>
+<!-- ================= Capacitor native bridge ================= -->
+<script>
+(function () {
+  const Cap = window.Capacitor;
+  const isNative = !!(Cap && Cap.isNativePlatform && Cap.isNativePlatform());
+
+  // Offline support: cache app shell + map tiles so viewed areas work with no signal.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch((e) => console.warn('SW failed', e));
+    });
+  }
+
+  // Hide the splash screen & tune the status bar once the web view is up
+  if (isNative && Cap.Plugins) {
+    const { SplashScreen, StatusBar } = Cap.Plugins;
+    try { StatusBar && StatusBar.setBackgroundColor({ color: '#1f3a24' }); } catch (e) {}
+    try { StatusBar && StatusBar.setStyle({ style: 'DARK' }); } catch (e) {}
+    window.addEventListener('load', () => {
+      setTimeout(() => { try { SplashScreen && SplashScreen.hide(); } catch (e) {} }, 400);
+    });
+  }
+
+  // "Locate me" — uses native Geolocation plugin when available, else browser API
+  async function locate() {
+    try {
+      let coords;
+      if (isNative && Cap.Plugins && Cap.Plugins.Geolocation) {
+        const pos = await Cap.Plugins.Geolocation.getCurrentPosition({ enableHighAccuracy: true });
+        coords = pos.coords;
+      } else if (navigator.geolocation) {
+        coords = await new Promise((res, rej) =>
+          navigator.geolocation.getCurrentPosition(p => res(p.coords), rej, { enableHighAccuracy: true }));
+      } else { return; }
+      if (window.map && coords) {
+        const ll = [coords.latitude, coords.longitude];
+        window.map.setView(ll, 14);
+        if (window._meMarker) window.map.removeLayer(window._meMarker);
+        window._meMarker = L.circleMarker(ll, { radius: 7, color: '#1f6feb', fillColor: '#3b82f6', fillOpacity: 0.9, weight: 2 })
+          .addTo(window.map).bindPopup('You are here');
+      }
+    } catch (e) { console.warn('Geolocation failed', e); }
+  }
+
+  // ---- Offline region download ----
+  const TILE_CACHE = 'trail-tiles-v1';
+  const DL_CAP = 4000;                 // hard ceiling on a single download
+  const SUBS = ['a', 'b', 'c'];
+
+  // Slippy-map tile math
+  const lon2x = (lon, z) => Math.floor((lon + 180) / 360 * 2 ** z);
+  function lat2y(lat, z) {
+    const l = Math.max(-85.0511, Math.min(85.0511, lat)) * Math.PI / 180;
+    return Math.floor((1 - Math.log(Math.tan(l) + 1 / Math.cos(l)) / Math.PI) / 2 * 2 ** z);
+  }
+  function tilesForBounds(b, z) {
+    const n = 2 ** z, list = [];
+    const xa = lon2x(b.getWest(), z), xb = lon2x(b.getEast(), z);
+    const ya = lat2y(b.getNorth(), z), yb = lat2y(b.getSouth(), z);
+    for (let x = Math.min(xa, xb); x <= Math.max(xa, xb); x++)
+      for (let y = Math.min(ya, yb); y <= Math.max(ya, yb); y++)
+        list.push({ z, x: ((x % n) + n) % n, y });
+    return list;
+  }
+  function planDownload() {
+    const b = window.map.getBounds(), zNow = window.map.getZoom();
+    const zMax = Math.min(zNow + 2, 16);
+    let tiles = [];
+    for (let z = zNow; z <= zMax; z++) tiles = tiles.concat(tilesForBounds(b, z));
+    return { tiles, zNow, zMax };
+  }
+  async function downloadTiles(tiles, onProgress, signal) {
+    const cache = await caches.open(TILE_CACHE);
+    const queue = tiles.slice();
+    let done = 0, ok = 0;
+    async function worker() {
+      while (queue.length) {
+        if (signal.aborted) return;
+        const t = queue.shift();
+        const url = `https://${SUBS[(t.x + t.y) % 3]}.tile.opentopomap.org/${t.z}/${t.x}/${t.y}.png`;
+        const req = new Request(url, { mode: 'no-cors' });
+        try {
+          if (!(await cache.match(req))) { await cache.put(req, await fetch(req)); }
+          ok++;
+        } catch (e) { /* skip failed tile */ }
+        onProgress(++done, tiles.length, ok);
+      }
+    }
+    await Promise.all(Array.from({ length: 4 }, worker)); // 4-way concurrency, polite to server
+    return ok;
+  }
+
+  function buildDownloadUI(mapEl) {
+    // Floating download button (sits above the locate button)
+    const dlBtn = document.createElement('button');
+    dlBtn.id = 'dl-area-btn';
+    dlBtn.title = 'Download this area for offline use';
+    dlBtn.textContent = '⬇';
+    dlBtn.setAttribute('aria-label', 'Download this area for offline use');
+    Object.assign(dlBtn.style, {
+      position: 'absolute', zIndex: 1000, right: '12px', bottom: '74px',
+      width: '46px', height: '46px', borderRadius: '50%', border: '1px solid #cfcabd',
+      background: '#fff', fontSize: '20px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.25)'
+    });
+    mapEl.appendChild(dlBtn);
+
+    // Modal
+    const overlay = document.createElement('div');
+    Object.assign(overlay.style, {
+      position: 'fixed', inset: '0', zIndex: 2000, display: 'none',
+      background: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: '20px'
+    });
+    overlay.innerHTML = `
+      <div style="background:#fff;border-radius:14px;max-width:340px;width:100%;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,0.3);font-family:inherit;color:#2b2a26">
+        <h3 style="margin:0 0 6px;font-size:17px">Download offline area</h3>
+        <p id="dl-info" style="margin:0 0 14px;font-size:13px;color:#7a766c;line-height:1.45"></p>
+        <div id="dl-bar-wrap" style="display:none;height:8px;background:#eee;border-radius:5px;overflow:hidden;margin-bottom:8px">
+          <div id="dl-bar" style="height:100%;width:0;background:#2e6b34;transition:width .15s"></div>
+        </div>
+        <p id="dl-status" style="margin:0 0 16px;font-size:12px;color:#7a766c;min-height:16px"></p>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button id="dl-cancel" style="padding:9px 14px;border:1px solid #d8d2c4;background:#fff;border-radius:8px;font-size:14px;cursor:pointer">Cancel</button>
+          <button id="dl-start" style="padding:9px 16px;border:none;background:#2e6b34;color:#fff;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Download</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const $ = (id) => overlay.querySelector('#' + id);
+    let ctrl = null, running = false;
+
+    function open() {
+      const { tiles, zNow, zMax } = planDownload();
+      overlay._plan = tiles;
+      const mb = (tiles.length * 0.012).toFixed(1); // ~12KB/tile estimate
+      $('dl-info').textContent =
+        `Current view, zoom ${zNow}–${zMax}: ${tiles.length.toLocaleString()} tiles (~${mb} MB). Stored on this device for offline use.`;
+      $('dl-bar-wrap').style.display = 'none';
+      $('dl-bar').style.width = '0';
+      $('dl-status').textContent = '';
+      $('dl-start').disabled = tiles.length > DL_CAP;
+      $('dl-start').textContent = 'Download';
+      if (tiles.length > DL_CAP) $('dl-status').textContent =
+        `Too large (max ${DL_CAP.toLocaleString()}). Zoom in or out to shrink the area.`;
+      overlay.style.display = 'flex';
+    }
+    function close() {
+      if (running && ctrl) ctrl.abort();
+      overlay.style.display = 'none';
+    }
+
+    dlBtn.addEventListener('click', open);
+    $('dl-cancel').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    $('dl-start').addEventListener('click', async () => {
+      const tiles = overlay._plan || [];
+      if (!tiles.length || running) return;
+      running = true; ctrl = new AbortController();
+      $('dl-start').disabled = true;
+      $('dl-cancel').textContent = 'Stop';
+      $('dl-bar-wrap').style.display = 'block';
+      const okCount = await downloadTiles(tiles, (done, total, ok) => {
+        $('dl-bar').style.width = (done / total * 100) + '%';
+        $('dl-status').textContent = `${done.toLocaleString()} / ${total.toLocaleString()} tiles`;
+      }, ctrl.signal);
+      running = false;
+      $('dl-cancel').textContent = 'Close';
+      if (ctrl.signal.aborted) {
+        $('dl-status').textContent = `Stopped — ${okCount.toLocaleString()} tiles saved.`;
+        $('dl-start').disabled = false; $('dl-start').textContent = 'Resume';
+      } else {
+        $('dl-status').textContent = `✓ Done — ${okCount.toLocaleString()} tiles available offline.`;
+        $('dl-start').textContent = 'Done';
+      }
+    });
+  }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    const mapEl = document.getElementById('map');
+    if (!mapEl) return;
+    const btn = document.createElement('button');
+    btn.id = 'locate-btn';
+    btn.title = 'Center on my location';
+    btn.textContent = '📍';
+    btn.setAttribute('aria-label', 'Center on my location');
+    Object.assign(btn.style, {
+      position: 'absolute', zIndex: 1000, right: '12px', bottom: '20px',
+      width: '46px', height: '46px', borderRadius: '50%', border: '1px solid #cfcabd',
+      background: '#fff', fontSize: '20px', cursor: 'pointer',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.25)'
+    });
+    btn.addEventListener('click', locate);
+    mapEl.style.position = mapEl.style.position || 'relative';
+    mapEl.appendChild(btn);
+    buildDownloadUI(mapEl);
+  });
+})();
+</script>
+</body>
+</html>
