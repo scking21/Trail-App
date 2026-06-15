@@ -313,6 +313,7 @@
   .te-head { border: 2px solid var(--easy); }    /* trailhead — green ring */
   .te-end  { border: 2px solid var(--hard); }    /* terminus  — red ring */
   .te-park { border: 2px solid #1f6feb; font-weight: 700; color: #1f6feb; font-size: 14px; } /* parking — blue ring */
+  .te-wp   { border: 2px solid #b8860b; }          /* user waypoint — gold ring */
 
   /* ---- Mobile / native (Capacitor) polish ---- */
   /* Respect notches & status bars on both platforms */
@@ -1926,6 +1927,117 @@ renderPlanner();
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
   }
 
+  // ---- User waypoints: mark your spot offline with a custom label ----
+  // Stored in localStorage so they persist with no signal and across sessions.
+  function buildWaypointUI(mapEl) {
+    const WP_KEY = 'trailapp.waypoints';
+    let waypoints = [];
+    try { waypoints = JSON.parse(localStorage.getItem(WP_KEY) || '[]') || []; } catch {}
+    const wpLayer = L.layerGroup().addTo(window.map);
+    const save = () => { try { localStorage.setItem(WP_KEY, JSON.stringify(waypoints)); } catch {} };
+    const wpIcon = () => L.divIcon({ className: 'trail-end', html: '<div class="te te-wp">📌</div>', iconSize: [26, 26], iconAnchor: [13, 13] });
+
+    function render() {
+      wpLayer.clearLayers();
+      waypoints.forEach(w => {
+        const m = L.marker([w.lat, w.lon], { icon: wpIcon(), title: w.label, draggable: true })
+          .bindTooltip(w.label || 'Waypoint')
+          .on('click', () => openModal({ mode: 'edit', wp: w }))
+          .on('dragend', () => { const ll = m.getLatLng(); w.lat = ll.lat; w.lon = ll.lng; save(); })
+          .addTo(wpLayer);
+      });
+    }
+
+    // Floating "mark my location" button (top of the right-side stack).
+    const btn = document.createElement('button');
+    btn.id = 'wp-btn';
+    btn.title = 'Mark my location as a waypoint';
+    btn.textContent = '📌';
+    btn.setAttribute('aria-label', 'Mark my location as a waypoint');
+    Object.assign(btn.style, {
+      position: 'absolute', zIndex: 1000, right: '12px', bottom: '182px',
+      width: '46px', height: '46px', borderRadius: '50%', border: '1px solid #cfcabd',
+      background: '#fff', fontSize: '20px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.25)'
+    });
+    mapEl.appendChild(btn);
+
+    const overlay = document.createElement('div');
+    Object.assign(overlay.style, {
+      position: 'fixed', inset: '0', zIndex: 2000, display: 'none',
+      background: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: '20px'
+    });
+    overlay.innerHTML = `
+      <div style="background:#fff;border-radius:14px;max-width:340px;width:100%;padding:18px 20px;box-shadow:0 10px 40px rgba(0,0,0,0.3);font-family:inherit;color:#2b2a26">
+        <h3 id="wp-title" style="margin:0 0 4px;font-size:17px">Mark this spot</h3>
+        <p id="wp-coords" style="margin:0 0 12px;font-size:12px;color:#7a766c"></p>
+        <label style="display:block;font-size:11px;color:#7a766c;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Label</label>
+        <input id="wp-input" type="text" maxlength="60" placeholder="e.g. Camp, Water cache, Car, Turnaround"
+          style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #d8d2c4;border-radius:8px;font-size:15px;font-family:inherit;margin-bottom:14px">
+        <div style="display:flex;gap:10px;align-items:center">
+          <button id="wp-delete" style="padding:9px 12px;border:1px solid #e0a39a;background:#fff;color:#c0392b;border-radius:8px;font-size:13px;cursor:pointer;display:none">Delete</button>
+          <div style="display:flex;gap:10px;margin-left:auto">
+            <button id="wp-cancel" style="padding:9px 14px;border:1px solid #d8d2c4;background:#fff;border-radius:8px;font-size:14px;cursor:pointer">Cancel</button>
+            <button id="wp-save" style="padding:9px 16px;border:none;background:#2e6b34;color:#fff;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Save</button>
+          </div>
+        </div>
+        <p id="wp-note" style="margin:10px 0 0;font-size:11px;color:#7a766c;line-height:1.4"></p>
+      </div>`;
+    document.body.appendChild(overlay);
+    const q = id => overlay.querySelector('#' + id);
+    let editing = null, pending = null;
+
+    function close() { overlay.style.display = 'none'; editing = null; pending = null; }
+    function openModal(opts) {
+      editing = opts.mode === 'edit' ? opts.wp : null;
+      pending = opts.mode === 'create' ? { lat: opts.lat, lon: opts.lon } : null;
+      const ll = editing || pending;
+      q('wp-title').textContent = editing ? 'Edit waypoint' : 'Mark this spot';
+      q('wp-coords').textContent = ll ? `${(+ll.lat).toFixed(5)}, ${(+ll.lon).toFixed(5)}` : '';
+      q('wp-input').value = editing ? (editing.label || '') : '';
+      q('wp-delete').style.display = editing ? 'inline-block' : 'none';
+      q('wp-note').textContent = opts.note || (editing ? 'Tip: drag the pin on the map to fine-tune its position.' : '');
+      overlay.style.display = 'flex';
+      setTimeout(() => q('wp-input').focus(), 30);
+    }
+
+    q('wp-cancel').addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    q('wp-input').addEventListener('keydown', e => { if (e.key === 'Enter') q('wp-save').click(); });
+    q('wp-save').addEventListener('click', () => {
+      const label = q('wp-input').value.trim() || 'Waypoint';
+      if (editing) { editing.label = label; }
+      else if (pending) { waypoints.push({ id: 'wp' + Date.now(), lat: pending.lat, lon: pending.lon, label, ts: Date.now() }); }
+      save(); render(); close();
+    });
+    q('wp-delete').addEventListener('click', () => {
+      if (editing) { waypoints = waypoints.filter(w => w !== editing); save(); render(); }
+      close();
+    });
+
+    async function getCoords() {
+      try {
+        if (isNative && Cap.Plugins && Cap.Plugins.Geolocation) {
+          const pos = await Cap.Plugins.Geolocation.getCurrentPosition({ enableHighAccuracy: true });
+          return { lat: pos.coords.latitude, lon: pos.coords.longitude, note: '' };
+        } else if (navigator.geolocation) {
+          const c = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(p => res(p.coords), rej, { enableHighAccuracy: true }));
+          return { lat: c.latitude, lon: c.longitude, note: '' };
+        }
+      } catch (e) { /* fall through to map center */ }
+      const c = window.map.getCenter();
+      return { lat: c.lat, lon: c.lng, note: 'Couldn’t get GPS — using map center. Drag the pin to your spot after saving.' };
+    }
+
+    btn.addEventListener('click', async () => {
+      btn.disabled = true; btn.textContent = '…';
+      const c = await getCoords();
+      btn.disabled = false; btn.textContent = '📌';
+      openModal({ mode: 'create', lat: c.lat, lon: c.lon, note: c.note });
+    });
+
+    render();
+  }
+
   window.addEventListener('DOMContentLoaded', () => {
     const mapEl = document.getElementById('map');
     if (!mapEl) return;
@@ -1945,6 +2057,7 @@ renderPlanner();
     mapEl.appendChild(btn);
     buildDownloadUI(mapEl);
     buildEmergencyUI(mapEl);
+    buildWaypointUI(mapEl);
   });
 })();
 </script>
