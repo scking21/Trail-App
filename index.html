@@ -252,8 +252,8 @@
   }
   .plan-item .pi-remove:hover { color: var(--hard); }
   .plan-empty { color: var(--muted); font-size: 15px; padding: 30px 0; text-align: center; }
-  #wp-export { background: none; border: none; color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer; padding: 4px; }
-  #wp-export:hover { text-decoration: underline; }
+  #wp-export, #wp-import { background: none; border: none; color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer; padding: 4px; }
+  #wp-export:hover, #wp-import:hover { text-decoration: underline; }
   #wp-export:disabled { color: var(--muted); cursor: default; text-decoration: none; }
   .plan-item .pi-edit { border: none; background: none; color: var(--muted); font-size: 15px; cursor: pointer; line-height: 1; padding: 4px; }
   .plan-item .pi-edit:hover { color: var(--accent); }
@@ -489,9 +489,14 @@
     <div class="wp-section">
       <div class="planner-head" style="margin-top:24px">
         <h2 style="font-size:17px">📌 My Waypoints <span class="kit-tag" id="wp-count">0</span></h2>
-        <button id="wp-export" title="Export waypoints as a GPX file">Export GPX</button>
+        <div style="display:flex;gap:14px;align-items:center">
+          <button id="wp-import" title="Import waypoints from a GPX file">Import GPX</button>
+          <button id="wp-export" title="Export waypoints as a GPX file">Export GPX</button>
+        </div>
       </div>
-      <p class="planner-sub" style="margin-bottom:14px">Spots you’ve marked with the 📌 button on the map. Tap one to zoom to it. Saved on this device.</p>
+      <p class="planner-sub" style="margin-bottom:6px">Spots you’ve marked with the 📌 button on the map. Tap one to zoom to it. Saved on this device.</p>
+      <p id="wp-status" style="margin:0 0 14px;font-size:12px;color:var(--accent);min-height:15px"></p>
+      <input id="wp-file" type="file" accept=".gpx,application/gpx+xml,application/xml,text/xml" style="display:none">
       <div class="plan-list" id="wp-list"></div>
     </div>
 
@@ -1586,8 +1591,35 @@ function renderWaypointList() {
   });
 }
 window.renderWaypointList = renderWaypointList;
+let wpStatusTimer;
+function showWpStatus(msg) {
+  const el = document.getElementById('wp-status');
+  if (!el) return;
+  el.textContent = msg;
+  clearTimeout(wpStatusTimer);
+  wpStatusTimer = setTimeout(() => { el.textContent = ''; }, 4000);
+}
 const wpExportBtn = document.getElementById('wp-export');
 if (wpExportBtn) wpExportBtn.addEventListener('click', () => window.Waypoints && window.Waypoints.exportGPX());
+const wpImportBtn = document.getElementById('wp-import');
+const wpFileInput = document.getElementById('wp-file');
+if (wpImportBtn && wpFileInput) {
+  wpImportBtn.addEventListener('click', () => wpFileInput.click());
+  wpFileInput.addEventListener('change', () => {
+    const file = wpFileInput.files && wpFileInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const res = window.Waypoints ? window.Waypoints.importGPX(String(reader.result)) : { added: 0, error: 'Not ready.' };
+      if (res.error) showWpStatus(res.error);
+      else showWpStatus(`Imported ${res.added} waypoint${res.added === 1 ? '' : 's'}` +
+        (res.skipped ? ` (${res.skipped} skipped as duplicate/invalid).` : '.'));
+      wpFileInput.value = ''; // allow re-importing the same file
+    };
+    reader.onerror = () => { showWpStatus('Could not read the file.'); wpFileInput.value = ''; };
+    reader.readAsText(file);
+  });
+}
 
 // Refresh region from the map view when opening the Planner with an empty plan.
 document.querySelector('nav button[data-tab="planner"]').addEventListener('click', () => { renderTripKit(); renderWaypointList(); });
@@ -2121,8 +2153,35 @@ renderPlanner();
       edit: (id) => { const w = waypoints.find(x => x.id === id); if (w) openModal({ mode: 'edit', wp: w }); },
       remove: (id) => { waypoints = waypoints.filter(x => x.id !== id); save(); render(); },
       exportGPX,
+      importGPX,
       onChange: (fn) => { listeners.push(fn); }
     };
+
+    // Import named <wpt> points from a GPX file. Skips exact duplicates so
+    // re-importing the same file doesn't pile up. Returns {added} or {error}.
+    function importGPX(text) {
+      let doc;
+      try { doc = new DOMParser().parseFromString(text, 'application/xml'); }
+      catch (e) { return { added: 0, error: 'Could not read the file.' }; }
+      if (!doc || doc.getElementsByTagName('parsererror').length) return { added: 0, error: 'Not a valid GPX/XML file.' };
+      const wpts = doc.getElementsByTagName('wpt');
+      if (!wpts.length) return { added: 0, error: 'No waypoints (<wpt>) found in that file.' };
+      const dup = (lat, lon, label) => waypoints.some(w =>
+        Math.abs(w.lat - lat) < 1e-6 && Math.abs(w.lon - lon) < 1e-6 && (w.label || '') === label);
+      let added = 0, skipped = 0;
+      for (let i = 0; i < wpts.length; i++) {
+        const el = wpts[i];
+        const lat = parseFloat(el.getAttribute('lat')), lon = parseFloat(el.getAttribute('lon'));
+        if (!isFinite(lat) || !isFinite(lon)) { skipped++; continue; }
+        const nameEl = el.getElementsByTagName('name')[0];
+        const label = (nameEl && nameEl.textContent.trim()) || 'Waypoint';
+        if (dup(lat, lon, label)) { skipped++; continue; }
+        waypoints.push({ id: 'wp' + Date.now() + '_' + added, lat, lon, label, ts: Date.now() });
+        added++;
+      }
+      if (added) { save(); render(); }
+      return { added, skipped };
+    }
 
     render();
     // Let the Planner render its list now that the API exists.
