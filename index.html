@@ -312,6 +312,7 @@
   }
   .te-head { border: 2px solid var(--easy); }    /* trailhead — green ring */
   .te-end  { border: 2px solid var(--hard); }    /* terminus  — red ring */
+  .te-park { border: 2px solid #1f6feb; font-weight: 700; color: #1f6feb; font-size: 14px; } /* parking — blue ring */
 
   /* ---- Mobile / native (Capacitor) polish ---- */
   /* Respect notches & status bars on both platforms */
@@ -1548,6 +1549,18 @@ function renderTrails(list) {
       .addTo(trailLayer)
       .bindTooltip(t.name)
       .on('click', () => showTrail(t));
+    // Parking marker — same 24px circle as the trailhead (.te) icon, blue "P".
+    if (t.parking && t.parking.lat != null) {
+      const pIcon = L.divIcon({
+        className: 'trail-end',
+        html: '<div class="te te-park">P</div>',
+        iconSize: [24, 24], iconAnchor: [12, 12]
+      });
+      L.marker([t.parking.lat, t.parking.lon], { icon: pIcon, title: 'Parking — ' + t.name })
+        .addTo(trailLayer)
+        .bindTooltip('Parking' + (t.parking.note ? ' · ' + t.parking.note : ''))
+        .on('click', () => showTrail(t));
+    }
   });
 }
 
