@@ -1110,6 +1110,14 @@ const DEFAULT_EMERGENCY = [
   { label: 'Emergency (police / fire / medical)', tel: '911', primary: true },
   { label: 'Poison Control (national)',           tel: '1-800-222-1222' }
 ];
+// Exposed for the floating map "SOS" button (which lives in a separate module).
+window.currentEmergencyInfo = () => {
+  const region = regions[currentRegionKey];
+  return {
+    label: region ? region.label : 'Nationwide',
+    contacts: (region && region.emergency) || DEFAULT_EMERGENCY
+  };
+};
 
 // Populate the road/parking access block (curated trails only) and the
 // region's emergency-contact list. All data is inline → works fully offline.
@@ -1872,6 +1880,52 @@ renderPlanner();
     });
   }
 
+  function buildEmergencyUI(mapEl) {
+    // Floating SOS button — always-available emergency contacts for the current area.
+    const sosBtn = document.createElement('button');
+    sosBtn.id = 'sos-btn';
+    sosBtn.title = 'Emergency contacts for this area';
+    sosBtn.textContent = '🆘';
+    sosBtn.setAttribute('aria-label', 'Emergency contacts for this area');
+    Object.assign(sosBtn.style, {
+      position: 'absolute', zIndex: 1000, right: '12px', bottom: '128px',
+      width: '46px', height: '46px', borderRadius: '50%', border: '1px solid #e0a39a',
+      background: '#fff', fontSize: '22px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.25)'
+    });
+    mapEl.appendChild(sosBtn);
+
+    const overlay = document.createElement('div');
+    Object.assign(overlay.style, {
+      position: 'fixed', inset: '0', zIndex: 2000, display: 'none',
+      background: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: '20px'
+    });
+    overlay.innerHTML = `
+      <div style="background:#fff;border-radius:14px;max-width:360px;width:100%;padding:18px 20px;box-shadow:0 10px 40px rgba(0,0,0,0.3);font-family:inherit;color:#2b2a26">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div class="emergency-h" style="margin:0">🆘 Emergency contacts <span id="sos-area"></span></div>
+          <button id="sos-close" aria-label="Close" style="border:none;background:none;font-size:20px;line-height:1;cursor:pointer;color:#7a766c">✕</button>
+        </div>
+        <div id="sos-list"></div>
+        <div class="emergency-note">Tap to dial (works offline). Verify numbers against official sources before relying on them.</div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    function open() {
+      const info = (window.currentEmergencyInfo && window.currentEmergencyInfo()) || { label: 'Nationwide', contacts: [] };
+      overlay.querySelector('#sos-area').textContent = info.label ? '· ' + info.label : '';
+      overlay.querySelector('#sos-list').innerHTML = info.contacts.map(c => {
+        const tel = c.tel.replace(/[^+0-9]/g, '');
+        return `<a class="emergency-item${c.primary ? ' primary' : ''}" href="tel:${tel}">` +
+               `<span class="ei-lab">${c.label}</span><span class="ei-tel">${c.tel}</span></a>`;
+      }).join('');
+      overlay.style.display = 'flex';
+    }
+    function close() { overlay.style.display = 'none'; }
+    sosBtn.addEventListener('click', open);
+    overlay.querySelector('#sos-close').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  }
+
   window.addEventListener('DOMContentLoaded', () => {
     const mapEl = document.getElementById('map');
     if (!mapEl) return;
@@ -1890,6 +1944,7 @@ renderPlanner();
     mapEl.style.position = mapEl.style.position || 'relative';
     mapEl.appendChild(btn);
     buildDownloadUI(mapEl);
+    buildEmergencyUI(mapEl);
   });
 })();
 </script>
