@@ -35,7 +35,9 @@
       "Bash(sudo -n true)",
       "Bash(xcrun simctl *)",
       "Bash(xcodebuild -workspace App.xcworkspace -scheme App -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -configuration Debug build)",
-      "Bash(which brew *)"
+      "Bash(which brew *)",
+      "Bash(/usr/libexec/PlistBuddy -c \"Print\" App/Info.plist)",
+      "Bash(plutil -p App/Info.plist)"
     ]
   }
 }

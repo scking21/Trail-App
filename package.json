@@ -9,6 +9,7 @@
   "scripts": {
     "copy": "cpx \"index.html\" www && cpx \"sw.js\" www && cpx \"geo.js\" www && cpx \"ar.js\" www && echo copied",
     "config:native": "bash scripts/apply-native-config.sh",
+    "ios:bump": "bash scripts/bump-ios-build.sh",
     "test": "jest",
     "build": "npm run copy",
     "sync": "npm run build && cap sync",

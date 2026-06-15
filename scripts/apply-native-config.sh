@@ -19,6 +19,11 @@ if [ -f "$PLIST" ]; then
   echo "  ✓ NSLocationWhenInUseUsageDescription set"
   set_str NSCameraUsageDescription "Show the trail marker over your live camera in AR view."
   echo "  ✓ NSCameraUsageDescription set"
+  # Export compliance: the app uses only standard HTTPS encryption, which is
+  # exempt — declaring this skips the App Store Connect prompt on every upload.
+  "$PB" -c "Add :ITSAppUsesNonExemptEncryption bool false" "$PLIST" 2>/dev/null \
+    || "$PB" -c "Set :ITSAppUsesNonExemptEncryption false" "$PLIST"
+  echo "  ✓ ITSAppUsesNonExemptEncryption = NO"
 else
   echo "• Skipping iOS: $PLIST not found (run 'npx cap add ios' first)"
 fi
