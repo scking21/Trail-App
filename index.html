@@ -160,6 +160,26 @@
   .stat .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
   .stat .value { font-size: 15px; font-weight: 600; }
   #detail p.desc { font-size: 13px; color: #4d4a42; line-height: 1.45; margin: 0 0 14px; }
+  /* Access (road + parking) block */
+  .access-block { border: 1px solid var(--line, #e2ded3); border-radius: 8px; padding: 10px 12px; margin: 0 0 12px; background: #faf9f5; }
+  .access-row { display: flex; gap: 10px; align-items: flex-start; }
+  .access-row + .access-row { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line, #e9e5db); }
+  .access-ico { font-size: 16px; line-height: 1.3; flex: 0 0 auto; }
+  .access-lab { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .access-val { font-size: 13px; color: #3a382f; line-height: 1.4; margin-top: 1px; }
+  .access-link { display: inline-block; margin-top: 5px; font-size: 12px; font-weight: 600; color: var(--accent); text-decoration: none; cursor: pointer; }
+  .access-link:hover { text-decoration: underline; }
+  /* Emergency block */
+  .emergency-block { border: 1px solid #e7c3bd; border-radius: 8px; padding: 10px 12px; margin: 0 0 12px; background: #fcf3f1; }
+  .emergency-h { font-size: 12px; font-weight: 700; color: #a23b2c; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; }
+  .emergency-h span { font-weight: 500; text-transform: none; color: var(--muted); letter-spacing: 0; }
+  a.emergency-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; text-decoration: none; color: inherit; padding: 6px 0; border-top: 1px solid #f0d8d3; }
+  a.emergency-item:first-of-type { border-top: none; }
+  .emergency-item .ei-lab { font-size: 12px; color: #4d4a42; line-height: 1.3; }
+  .emergency-item .ei-tel { font-size: 14px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+  a.emergency-item.primary { background: #fbe4df; margin: 0 -6px; padding: 8px 6px; border-radius: 6px; border-top: none; }
+  a.emergency-item.primary .ei-tel { color: #c0392b; font-size: 16px; }
+  .emergency-note { font-size: 11px; color: var(--muted); line-height: 1.4; margin-top: 8px; }
   .directions-btn {
     display: block;
     text-align: center;
@@ -418,6 +438,15 @@
         <div class="stat"><div class="label" id="d-label-land">Land</div><div class="value" id="d-land"></div></div>
       </div>
       <p class="desc" id="d-desc"></p>
+      <div id="d-access" class="access-block" style="display:none">
+        <div class="access-row" id="d-road-row"><span class="access-ico">🚗</span><div><div class="access-lab">Road access</div><div class="access-val" id="d-road"></div></div></div>
+        <div class="access-row" id="d-parking-row"><span class="access-ico">🅿️</span><div><div class="access-lab">Parking</div><div class="access-val" id="d-parking"></div><a class="access-link" id="d-parking-map" rel="noopener">📍 Open parking in maps</a></div></div>
+      </div>
+      <div id="d-emergency" class="emergency-block" style="display:none">
+        <div class="emergency-h">🆘 Emergency contacts <span id="d-emergency-area"></span></div>
+        <div id="d-emergency-list"></div>
+        <div class="emergency-note">Tap to dial (works offline). Verify numbers against official sources before relying on them.</div>
+      </div>
       <a class="directions-btn" id="d-directions" target="_blank" rel="noopener">🧭 Directions via OSM</a>
       <button class="directions-btn" id="d-ar" style="display:none;margin-top:8px;background:#2b4a31;border:none;cursor:pointer;width:100%">📷 AR — point me there</button>
       <button class="plan-btn" id="d-add-plan">＋ Add to Plan</button>
@@ -992,44 +1021,78 @@ const regions = {
   superstition: {
     label: 'Superstition Mtns, AZ',
     center: [33.43, -111.42], zoom: 12,
+    // Local emergency contacts. 911 is primary; others are non-emergency / agency lines.
+    // VERIFY these numbers against current official sources before relying on them.
+    emergency: [
+      { label: 'Emergency (police / fire / medical)', tel: '911', primary: true },
+      { label: 'Pinal County Sheriff (dispatch)',     tel: '520-866-5111' },
+      { label: 'Maricopa County Sheriff (non-emerg.)', tel: '602-876-1011' },
+      { label: 'Tonto NF — Mesa Ranger District',     tel: '480-610-3300' },
+      { label: 'Poison Control (national)',           tel: '1-800-222-1222' }
+    ],
     trails: [
       { name: 'Treasure Loop Trail',     diff: 'easy',     lat: 33.4612, lon: -111.4793, length: '2.4 mi', gain: '500 ft',   time: '1.3 h', land: 'State Park',
+        road: 'Paved to trailhead', parking: { lat: 33.4607, lon: -111.4789, note: 'Lost Dutchman State Park lot (entry fee)' },
         desc: 'Popular loop in Lost Dutchman State Park beneath the Flatiron, with classic views of the Superstition cliffs and spring wildflowers.' },
       { name: 'Siphon Draw to Flatiron', diff: 'hard',     lat: 33.4607, lon: -111.4789, length: '5.8 mi', gain: '2,800 ft', time: '5.5 h', land: 'Wilderness',
+        road: 'Paved to trailhead', parking: { lat: 33.4607, lon: -111.4789, note: 'Lost Dutchman State Park lot (entry fee)' },
         desc: 'Brutal scramble up Siphon Draw to the Flatiron summit. Steep slickrock and Class 3 climbing near the top; no shade, carry ample water.' },
       { name: 'Peralta Trail',           diff: 'moderate', lat: 33.3968, lon: -111.3483, length: '4.6 mi', gain: '1,400 ft', time: '3 h',   land: 'Wilderness',
+        road: 'Graded dirt (Peralta Rd, ~8 mi) — 2WD OK when dry', parking: { lat: 33.3973, lon: -111.3479, note: 'Peralta trailhead lot (large; fills early weekends)' },
         desc: 'Climbs Peralta Canyon to Fremont Saddle and the iconic view of Weavers Needle. The most famous hike in the range.' },
       { name: 'Hieroglyphic Trail',      diff: 'moderate', lat: 33.3922, lon: -111.4243, length: '2.8 mi', gain: '650 ft',   time: '2 h',   land: 'Wilderness',
+        road: 'Paved residential + short dirt — 2WD OK', parking: { lat: 33.3918, lon: -111.4256, note: 'Hieroglyphic trailhead lot (small; arrive early)' },
         desc: 'Gentle desert approach to a canyon pool ringed by Hohokam petroglyphs. Busy on weekends; start early.' },
       { name: 'Wave Cave Trail',         diff: 'moderate', lat: 33.3846, lon: -111.4030, length: '3.1 mi', gain: '900 ft',   time: '2.3 h', land: 'Wilderness',
+        road: 'Rough dirt (Carney Springs Rd) — high clearance recommended', parking: { lat: 33.3859, lon: -111.4019, note: 'Carney Springs roadside / small dirt lot' },
         desc: 'Short steep climb to a wind-carved cave that frames a perfect "wave." Loose final pitch; hands needed near the top.' },
       { name: 'First Water / Dutchman',  diff: 'moderate', lat: 33.4792, lon: -111.4443, length: '6.2 mi', gain: '750 ft',   time: '3.5 h', land: 'Wilderness',
+        road: 'Graded dirt (First Water Rd / FR78) — washboard, 2WD OK dry', parking: { lat: 33.4799, lon: -111.4438, note: 'First Water trailhead lot (large)' },
         desc: 'Rolling desert loop from the First Water trailhead through saguaro flats and washes — a gateway into the Dutchman backcountry.' },
       { name: 'Massacre Grounds Trail',  diff: 'moderate', lat: 33.4731, lon: -111.4571, length: '4.2 mi', gain: '1,100 ft', time: '2.8 h', land: 'National Forest',
+        road: 'Graded dirt spur off First Water Rd — 2WD OK dry', parking: { lat: 33.4726, lon: -111.4566, note: 'Massacre Grounds trailhead (small dirt lot)' },
         desc: 'Quiet route toward a seasonal waterfall below the cliffs, steeped in Lost Dutchman lore. Faint tread past the falls junction.' },
       { name: 'Lost Goldmine Trail',     diff: 'easy',     lat: 33.3869, lon: -111.4481, length: '5.0 mi', gain: '450 ft',   time: '2.5 h', land: 'Private',
+        road: 'Paved access (Gold Canyon)', parking: { lat: 33.3872, lon: -111.4487, note: 'Cloudview/Gold Canyon trailhead lots (both ends)' },
         desc: 'Mostly level trail tracing the southern base of the range across an easement corridor. Big views with little climbing.' }
     ]
   },
   salida: {
     label: 'Salida, CO',
     center: [38.535, -105.998], zoom: 12,
+    // Local emergency contacts. 911 is primary; others are non-emergency / agency lines.
+    // VERIFY these numbers against current official sources before relying on them.
+    emergency: [
+      { label: 'Emergency (police / fire / medical)',     tel: '911', primary: true },
+      { label: 'Chaffee County Sheriff (non-emerg.)',     tel: '719-539-2596' },
+      { label: 'Heart of the Rockies Med. Center, Salida', tel: '719-530-2200' },
+      { label: 'San Isabel NF — Salida Ranger District',  tel: '719-539-3591' },
+      { label: 'Poison Control (national)',               tel: '1-800-222-1222' }
+    ],
     trails: [
       { name: 'Riverside Loop',        diff: 'easy',     lat: 38.605, lon: -106.045, length: '2.8 mi', gain: '210 ft',   time: '1.2 h', land: 'State Park',
+        road: 'Paved (in-town river park)', parking: { lat: 38.6047, lon: -106.0455, note: 'Riverside park lot (free)' },
         desc: 'Gentle riverside loop along the Arkansas corridor. Great for families; mostly flat with picnic spots.' },
       { name: 'Pinyon Bluffs Trail',   diff: 'easy',     lat: 38.520, lon: -106.235, length: '3.5 mi', gain: '380 ft',   time: '1.7 h', land: 'BLM',
+        road: 'Graded county dirt road — 2WD OK', parking: { lat: 38.5205, lon: -106.2358, note: 'BLM trailhead lot' },
         desc: 'Open pinyon-juniper country with broad valley views. Exposed — bring sun protection.' },
       { name: 'Aspen Vista Trail',     diff: 'moderate', lat: 38.660, lon: -105.960, length: '6.1 mi', gain: '1,450 ft', time: '3.5 h', land: 'National Forest',
+        road: 'Graded forest dirt road — high clearance helps upper section', parking: { lat: 38.6595, lon: -105.9608, note: 'Forest Service trailhead' },
         desc: 'Switchbacks through aspen groves to a ridgeline overlook. Spectacular in late September.' },
       { name: 'Granite Creek Trail',   diff: 'moderate', lat: 38.555, lon: -105.905, length: '7.4 mi', gain: '1,820 ft', time: '4 h',   land: 'National Forest',
+        road: 'Forest gravel road — 2WD OK', parking: { lat: 38.5546, lon: -105.9056, note: 'Granite Creek trailhead (gravel lot)' },
         desc: 'Follows a tumbling creek past granite outcrops. Several crossings — poles recommended in early summer.' },
       { name: 'Cottonwood Flats',      diff: 'easy',     lat: 38.675, lon: -106.110, length: '1.9 mi', gain: '120 ft',   time: '0.8 h', land: 'BLM',
+        road: 'Graded dirt — 2WD OK', parking: { lat: 38.6754, lon: -106.1105, note: 'Roadside pullout / small BLM lot' },
         desc: 'Short, level walk through cottonwood bottomland. Good birding at dawn.' },
       { name: 'Summit Ridge Traverse', diff: 'hard',     lat: 38.720, lon: -106.330, length: '11.2 mi', gain: '3,950 ft', time: '8 h',  land: 'Wilderness',
+        road: '4WD / high clearance required to upper trailhead (rough, rocky)', parking: { lat: 38.7196, lon: -106.3308, note: 'High 4WD trailhead (limited space)' },
         desc: 'Strenuous above-treeline traverse with sustained exposure and route-finding. Alpine start advised; afternoon storms common.' },
       { name: 'Cirque Lake Climb',     diff: 'hard',     lat: 38.650, lon: -106.385, length: '9.6 mi', gain: '3,200 ft', time: '6.5 h', land: 'Wilderness',
+        road: '4WD / high clearance required (rough forest road)', parking: { lat: 38.6495, lon: -106.3858, note: '4WD trailhead at road end' },
         desc: 'Steep climb to a glacial cirque lake at 12,100 ft. Talus near the top; sturdy boots essential.' },
       { name: 'Overlook Spur',         diff: 'moderate', lat: 38.585, lon: -106.020, length: '4.3 mi', gain: '980 ft',   time: '2.3 h', land: 'State Park',
+        road: 'Paved + gravel to trailhead', parking: { lat: 38.5846, lon: -106.0208, note: 'State Park lot (entry fee)' },
         desc: 'Climbs from the river canyon to a rim overlook of the Sawatch Range. Rocky tread in the upper half.' }
     ]
   }
@@ -1040,6 +1103,49 @@ const diffColors = { easy: '#2e8b57', moderate: '#2a6fb0', hard: '#c0392b' };
 const detail = document.getElementById('detail');
 const addPlanBtn = document.getElementById('d-add-plan');
 let currentTrail = null; // the curated trail shown in the panel (null for USGS lines)
+let currentRegionKey = 'superstition'; // drives which region's emergency contacts show
+// Shown when the map is outside a curated region — only nationally-valid numbers.
+const DEFAULT_EMERGENCY = [
+  { label: 'Emergency (police / fire / medical)', tel: '911', primary: true },
+  { label: 'Poison Control (national)',           tel: '1-800-222-1222' }
+];
+
+// Populate the road/parking access block (curated trails only) and the
+// region's emergency-contact list. All data is inline → works fully offline.
+// `tel:` links open the dialer offline; `geo:` hands off to the native maps app.
+function renderAccessAndEmergency(t) {
+  const accessBox = document.getElementById('d-access');
+  const roadRow = document.getElementById('d-road-row');
+  const parkRow = document.getElementById('d-parking-row');
+  const hasRoad = t && t.road;
+  const hasPark = t && t.parking && t.parking.lat != null;
+  roadRow.style.display = hasRoad ? '' : 'none';
+  parkRow.style.display = hasPark ? '' : 'none';
+  if (hasRoad) document.getElementById('d-road').textContent = t.road;
+  if (hasPark) {
+    const p = t.parking;
+    const lat = (+p.lat).toFixed(5), lon = (+p.lon).toFixed(5);
+    document.getElementById('d-parking').textContent =
+      (p.note ? p.note + ' · ' : '') + lat + ', ' + lon;
+    const link = document.getElementById('d-parking-map');
+    link.href = `geo:${lat},${lon}?q=${lat},${lon}(Parking)`;
+  }
+  accessBox.style.display = (hasRoad || hasPark) ? '' : 'none';
+
+  // Emergency contacts for the active region, or national-only fallback elsewhere.
+  const region = regions[currentRegionKey];
+  const box = document.getElementById('d-emergency');
+  const list = document.getElementById('d-emergency-list');
+  const contacts = (region && region.emergency) || DEFAULT_EMERGENCY;
+  if (!contacts.length) { box.style.display = 'none'; return; }
+  document.getElementById('d-emergency-area').textContent = region ? '· ' + region.label : '· nationwide';
+  list.innerHTML = contacts.map(c => {
+    const tel = c.tel.replace(/[^+0-9]/g, '');
+    return `<a class="emergency-item${c.primary ? ' primary' : ''}" href="tel:${tel}">` +
+           `<span class="ei-lab">${c.label}</span><span class="ei-tel">${c.tel}</span></a>`;
+  }).join('');
+  box.style.display = '';
+}
 
 // AR launch — points the live camera toward the shown trail's location.
 const arBtn = document.getElementById('d-ar');
@@ -1079,6 +1185,7 @@ function showTrail(t) {
   addPlanBtn.style.display = '';
   syncAddBtn();
   updateArBtn();
+  renderAccessAndEmergency(t);
   detail.classList.add('open');
 }
 
@@ -1113,6 +1220,7 @@ function showUsgsTrail(props, latlng) {
   addPlanBtn.style.display = '';
   syncAddBtn();
   updateArBtn();
+  renderAccessAndEmergency(null);
   detail.classList.add('open');
 }
 function showOffroad(props, latlng) {
@@ -1132,6 +1240,7 @@ function showOffroad(props, latlng) {
   document.getElementById('d-directions').href =
     `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&to=${lat}%2C${lng}#map=14/${lat}/${lng}`;
   updateArBtn();
+  renderAccessAndEmergency(null);
   detail.classList.add('open');
 }
 
@@ -1447,6 +1556,7 @@ const regionSelect = document.getElementById('region-select');
 function goToRegion(key) {
   const r = regions[key];
   if (!r) return;
+  currentRegionKey = key;
   detail.classList.remove('open');
   renderTrails(r.trails);
   regionSelect.value = 'region:' + key;          // keep dropdown in sync
@@ -1512,8 +1622,13 @@ const STATES = [
   ['WY','Wyoming',43.730,-110.800,11,'Grand Teton NP']
 ];
 
+// States whose directory anchor coincides with a curated region (so their
+// region-specific emergency contacts apply). Everywhere else falls back to
+// national-only numbers — never show another area's local dispatch.
+const STATE_REGION = { AZ: 'superstition', CO: 'salida' };
 function goToState(s) {
   // s = [abbr,name,lat,lon,zoom,area]
+  currentRegionKey = STATE_REGION[s[0]] || null;
   detail.classList.remove('open');
   trailLayer.clearLayers();                       // hide curated trailhead markers
   if (!document.querySelector('input[data-trails="usgs"]').checked) {
