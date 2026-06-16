@@ -1858,6 +1858,38 @@ renderPlanner();
   });
 })();
 
+// ---------- Map-tools cluster: one expandable button for the tap-query tools ----------
+// Collapses the Land ID + Weather tap modes into a single 🔎 button that flies
+// the tools out to the left (fixed height) so the right-side stack stays short.
+const toolCluster = (function () {
+  const mapEl = document.getElementById('map');
+  let open = false; const tools = [];
+  const fab = document.createElement('button');
+  fab.id = 'tools-btn'; fab.textContent = '🔎'; fab.title = 'Map tools — Land ID, Weather';
+  fab.setAttribute('aria-label', 'Map tools');
+  Object.assign(fab.style, { position: 'absolute', zIndex: 1001, right: '12px', bottom: '290px',
+    width: '46px', height: '46px', borderRadius: '50%', border: '1px solid #cfcabd',
+    background: '#fff', fontSize: '18px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.25)' });
+  mapEl.appendChild(fab);
+  function layout() {
+    tools.forEach((b, i) => Object.assign(b.style, { position: 'absolute', zIndex: 1000,
+      bottom: '290px', right: (70 + i * 54) + 'px', display: open ? 'flex' : 'none',
+      alignItems: 'center', justifyContent: 'center' }));
+  }
+  function refresh() {
+    const anyActive = tools.some(b => b.dataset.active === '1');
+    fab.style.background = open ? '#eef3ee' : (anyActive ? '#1f6feb' : '#fff');
+    fab.style.color = (!open && anyActive) ? '#fff' : '';
+  }
+  function setOpen(o) { open = o; layout(); refresh(); }
+  fab.addEventListener('click', () => setOpen(!open));
+  return {
+    add(b) { mapEl.appendChild(b); tools.push(b); layout(); b.addEventListener('click', () => setOpen(false)); },
+    refresh
+  };
+})();
+window.__toolCluster = toolCluster;
+
 // ---------- Land ID: tap the map to see who manages the land (PAD-US) ----------
 // Point-queries the nationwide PAD-US layer at the tapped spot, independent of
 // which layers are toggled on. Answers "whose land am I on / can I be here?".
@@ -1951,15 +1983,16 @@ renderPlanner();
   btn.title = 'Land ID — tap the map to see who manages the land';
   btn.textContent = 'ID';
   btn.setAttribute('aria-label', 'Land ID mode');
-  Object.assign(btn.style, { position: 'absolute', zIndex: 1000, right: '12px', bottom: '290px',
-    width: '46px', height: '46px', borderRadius: '50%', border: '1px solid #cfcabd',
+  Object.assign(btn.style, { width: '46px', height: '46px', borderRadius: '50%', border: '1px solid #cfcabd',
     background: '#fff', fontSize: '15px', fontWeight: '700', color: '#2e6b34', cursor: 'pointer',
     boxShadow: '0 2px 8px rgba(0,0,0,0.25)' });
-  mapEl.appendChild(btn);
+  window.__toolCluster.add(btn);
   function setActive(on) {
     active = on;
     btn.style.background = on ? '#2e6b34' : '#fff';
     btn.style.color = on ? '#fff' : '#2e6b34';
+    btn.dataset.active = on ? '1' : '';
+    window.__toolCluster.refresh();
     if (map._container) map._container.style.cursor = on ? 'crosshair' : '';
     if (on) map.on('click', onMapClick); else { map.off('click', onMapClick); map.closePopup(); }
   }
@@ -2007,13 +2040,14 @@ renderPlanner();
   btn.title = 'Weather forecast — tap the map for the NWS forecast';
   btn.textContent = '🌦';
   btn.setAttribute('aria-label', 'Weather forecast mode');
-  Object.assign(btn.style, { position: 'absolute', zIndex: 1000, right: '12px', bottom: '344px',
-    width: '46px', height: '46px', borderRadius: '50%', border: '1px solid #cfcabd',
+  Object.assign(btn.style, { width: '46px', height: '46px', borderRadius: '50%', border: '1px solid #cfcabd',
     background: '#fff', fontSize: '18px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.25)' });
-  mapEl.appendChild(btn);
+  window.__toolCluster.add(btn);
   function setActive(on) {
     active = on;
     btn.style.background = on ? '#1f6feb' : '#fff';
+    btn.dataset.active = on ? '1' : '';
+    window.__toolCluster.refresh();
     if (map._container) map._container.style.cursor = on ? 'crosshair' : '';
     if (on) map.on('click', onClick); else { map.off('click', onClick); map.closePopup(); }
   }
