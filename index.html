@@ -449,6 +449,15 @@
       <div class="legend-row"><span class="dot" style="background:#7a2bd0"></span>51°+ — extreme</div>
       <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4">Computed live from elevation tiles. 30–45° is the prime slab-avalanche range. Slopes below 27° are left clear. Zoom in for detail.</div>
     </section>
+    <section>
+      <h2>Weather <span id="radar-status"></span></h2>
+      <label class="layer-row"><input type="checkbox" id="radar-toggle"><span class="swatch" style="background:linear-gradient(90deg,#69f078,#f2e36a,#f2a23a,#e23b2e,#b026d3)"></span>Precipitation radar</label>
+      <div class="legend-row" style="margin-top:8px"><span class="dot" style="background:#69f078"></span>Light</div>
+      <div class="legend-row"><span class="dot" style="background:#f2a23a"></span>Moderate</div>
+      <div class="legend-row"><span class="dot" style="background:#e23b2e"></span>Heavy</div>
+      <div class="legend-row"><span class="dot" style="background:#b026d3"></span>Intense / hail</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4">Live radar (RainViewer). Shows the most recent scan time. Live data — not cached for offline.</div>
+    </section>
     <section id="detail">
       <button id="detail-close" title="Close">✕</button>
       <h3 id="d-name"></h3>
@@ -2019,6 +2028,33 @@ renderPlanner();
   if (cb) cb.addEventListener('change', () => {
     if (cb.checked) { layer.addTo(map); status.textContent = '· live'; status.className = ''; }
     else { map.removeLayer(layer); status.textContent = ''; }
+  });
+})();
+
+// ---------- Precipitation radar overlay (RainViewer — free, keyless) ----------
+(function () {
+  const COLOR = 4, SMOOTH = 1, SNOW = 1; // weather-channel palette, smoothed, show snow
+  let layer = null;
+  const cb = document.getElementById('radar-toggle');
+  const status = document.getElementById('radar-status');
+  async function enable() {
+    status.textContent = '· loading…'; status.className = 'loading';
+    try {
+      const meta = await (await fetch('https://api.rainviewer.com/public/weather-maps.json')).json();
+      const frames = (meta.radar && meta.radar.past) || [];
+      const frame = frames[frames.length - 1];
+      if (!frame) { status.textContent = '· no data'; status.className = 'error'; return; }
+      if (layer) map.removeLayer(layer);
+      layer = L.tileLayer(`${meta.host}${frame.path}/256/{z}/{x}/{y}/${COLOR}/${SMOOTH}_${SNOW}.png`,
+        { opacity: 0.6, zIndex: 350, maxZoom: 19 });
+      if (cb.checked) layer.addTo(map); else return;
+      const mins = Math.max(0, Math.round((Date.now() / 1000 - frame.time) / 60));
+      status.textContent = '· ' + (mins === 0 ? 'just now' : mins + ' min ago'); status.className = '';
+    } catch (e) { status.textContent = '· offline'; status.className = 'error'; }
+  }
+  if (cb) cb.addEventListener('change', () => {
+    if (cb.checked) enable();
+    else { if (layer) { map.removeLayer(layer); layer = null; } status.textContent = ''; status.className = ''; }
   });
 })();
 </script>
