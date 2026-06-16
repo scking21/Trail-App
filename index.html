@@ -2387,13 +2387,15 @@ renderPlanner();
           `<div style="font-weight:700;margin-bottom:4px">${esc(t.name)}</div>` +
           `<div style="font-size:12px;color:#555;margin-bottom:8px">` +
           `${fmtDist(t.dist)} · +${t.gain} m · ${fmtDur(t.dur)}</div>` +
+          `<button class="tr-fol" style="width:100%;padding:6px;border:1px solid #1f6feb;background:#1f6feb;color:#fff;border-radius:6px;font-size:12px;cursor:pointer;margin-bottom:6px">▶ Follow (off-route alerts)</button>` +
           `<div style="display:flex;gap:6px">` +
           `<button class="tr-exp" style="flex:1;padding:6px;border:1px solid #2e6b34;background:#2e6b34;color:#fff;border-radius:6px;font-size:12px;cursor:pointer">Export GPX</button>` +
           `<button class="tr-del" style="padding:6px 8px;border:1px solid #e0a39a;background:#fff;color:#c0392b;border-radius:6px;font-size:12px;cursor:pointer">Delete</button>` +
           `</div></div>`);
         pl.on('popupopen', e => {
           const root = e.popup.getElement();
-          const exp = root.querySelector('.tr-exp'), del = root.querySelector('.tr-del');
+          const exp = root.querySelector('.tr-exp'), del = root.querySelector('.tr-del'), fol = root.querySelector('.tr-fol');
+          if (fol) fol.onclick = () => startFollow(t);
           if (exp) exp.onclick = () => exportTrack(t);
           if (del) del.onclick = () => {
             if (!window.confirm('Delete this track?')) return;
@@ -2403,8 +2405,95 @@ renderPlanner();
       });
     }
 
+    // ---- Follow a track: off-route alert when you stray from the line ----
+    const OFF_M = 60;       // metres off the line before alerting
+    const BACK_M = 45;      // metres to be considered back on route (hysteresis)
+    let followRoute = null; // flat [{lat,lon}, ...] of the track being followed
+    let followWatch = null, followNative = false, offRoute = false;
+
+    const banner = document.createElement('div');
+    Object.assign(banner.style, {
+      position: 'absolute', zIndex: 1002, left: '50%', top: '12px', transform: 'translateX(-50%)',
+      display: 'none', maxWidth: '90%', padding: '8px 14px', borderRadius: '20px',
+      color: '#fff', fontFamily: 'inherit', fontSize: '13px', fontWeight: '600',
+      boxShadow: '0 2px 10px rgba(0,0,0,0.3)', whiteSpace: 'nowrap', cursor: 'pointer'
+    });
+    banner.title = 'Tap to stop following';
+    mapEl.appendChild(banner);
+    banner.addEventListener('click', stopFollow);
+
+    // Distance (m) from a point to a polyline, via local equirectangular projection.
+    function distToRoute(lat, lon, pts) {
+      const mLat = 111320, mLon = 111320 * Math.cos(lat * Math.PI / 180);
+      const P = { x: lon * mLon, y: lat * mLat };
+      let best = Infinity;
+      for (let i = 1; i < pts.length; i++) {
+        const A = { x: pts[i - 1].lon * mLon, y: pts[i - 1].lat * mLat };
+        const B = { x: pts[i].lon * mLon, y: pts[i].lat * mLat };
+        const dx = B.x - A.x, dy = B.y - A.y;
+        const len2 = dx * dx + dy * dy;
+        let t = len2 ? ((P.x - A.x) * dx + (P.y - A.y) * dy) / len2 : 0;
+        t = Math.max(0, Math.min(1, t));
+        const cx = A.x + t * dx, cy = A.y + t * dy;
+        const d = Math.hypot(P.x - cx, P.y - cy);
+        if (d < best) best = d;
+      }
+      return best;
+    }
+
+    function onFollowFix(coords) {
+      if (!followRoute) return;
+      const d = distToRoute(coords.latitude, coords.longitude, followRoute);
+      if (!offRoute && d > OFF_M) {
+        offRoute = true;
+        try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch {}
+      } else if (offRoute && d < BACK_M) {
+        offRoute = false;
+      }
+      banner.style.background = offRoute ? '#c0392b' : '#2e6b34';
+      banner.textContent = offRoute
+        ? `⚠️ Off route — ${Math.round(d)} m from the trail`
+        : `✓ On route — ${fmtDist(d)} away`;
+    }
+
+    async function startFollow(t) {
+      stopFollow();
+      followRoute = t.segments.flat().map(p => ({ lat: p.lat, lon: p.lon }));
+      if (followRoute.length < 2) { followRoute = null; return; }
+      offRoute = false;
+      banner.style.background = '#2e6b34';
+      banner.textContent = `Following “${t.name}” — locating…`;
+      banner.style.display = 'block';
+      window.map.closePopup();
+      try {
+        if (isNative && Cap.Plugins && Cap.Plugins.Geolocation) {
+          followNative = true;
+          followWatch = await Cap.Plugins.Geolocation.watchPosition(
+            { enableHighAccuracy: true }, (pos) => { if (pos && pos.coords) onFollowFix(pos.coords); });
+        } else if (navigator.geolocation) {
+          followNative = false;
+          followWatch = navigator.geolocation.watchPosition(
+            p => onFollowFix(p.coords), e => {}, { enableHighAccuracy: true, maximumAge: 0 });
+        }
+      } catch {}
+    }
+    async function stopFollow() {
+      followRoute = null; offRoute = false;
+      banner.style.display = 'none';
+      try {
+        if (followNative && Cap.Plugins && Cap.Plugins.Geolocation && followWatch != null) {
+          await Cap.Plugins.Geolocation.clearWatch({ id: followWatch });
+        } else if (followWatch != null && navigator.geolocation) {
+          navigator.geolocation.clearWatch(followWatch);
+        }
+      } catch {}
+      followWatch = null;
+    }
+
     window.Tracks = {
       all: () => tracks.map(t => ({ ...t })),
+      follow: (id) => { const t = tracks.find(x => x.id === id); if (t) startFollow(t); },
+      stopFollow,
       focus: (id) => {
         const t = tracks.find(x => x.id === id); if (!t) return;
         const mapTab = document.querySelector('nav button[data-tab="map"]'); if (mapTab) mapTab.click();
