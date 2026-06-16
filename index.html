@@ -439,6 +439,16 @@
       <div class="legend-row"><span class="leg-line" style="border-top:3px dashed var(--hard)"></span>Hard — 4x4 / rough</div>
       <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4">Dashed lines = vehicle tracks (OSM). Difficulty from track grade / 4WD-only tags.</div>
     </section>
+    <section>
+      <h2>Terrain <span id="slope-status"></span></h2>
+      <label class="layer-row"><input type="checkbox" id="slope-toggle"><span class="swatch" style="background:linear-gradient(90deg,#ffe08a,#f2a23a,#e23b2e,#7a2bd0)"></span>Slope-angle shading</label>
+      <div class="legend-row" style="margin-top:8px"><span class="dot" style="background:#f2e36a"></span>27–29° — caution</div>
+      <div class="legend-row"><span class="dot" style="background:#f2a23a"></span>30–34° — steep</div>
+      <div class="legend-row"><span class="dot" style="background:#e23b2e"></span>35–45° — avalanche-prone</div>
+      <div class="legend-row"><span class="dot" style="background:#a0263a"></span>46–50° — very steep</div>
+      <div class="legend-row"><span class="dot" style="background:#7a2bd0"></span>51°+ — extreme</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4">Computed live from elevation tiles. 30–45° is the prime slab-avalanche range. Slopes below 27° are left clear. Zoom in for detail.</div>
+    </section>
     <section id="detail">
       <button id="detail-close" title="Close">✕</button>
       <h3 id="d-name"></h3>
@@ -1943,6 +1953,72 @@ renderPlanner();
     btn.style.color = active ? '#fff' : '#2e6b34';
     if (map._container) map._container.style.cursor = active ? 'crosshair' : '';
     if (active) map.on('click', onMapClick); else { map.off('click', onMapClick); map.closePopup(); }
+  });
+})();
+
+// ---------- Slope-angle shading: computed live from terrain-RGB tiles ----------
+// Decodes AWS Terrarium elevation tiles in a canvas, computes per-pixel slope,
+// and paints the avalanche-relevant angles. No backend; CORS-enabled tiles.
+(function () {
+  const TERR = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
+  function slopeColor(a) {
+    if (a < 27) return null;                 // gentle — leave clear
+    if (a < 30) return [242, 227, 106];      // 27–29 caution
+    if (a < 35) return [242, 162, 58];       // 30–34 steep
+    if (a < 46) return [226, 59, 46];        // 35–45 avalanche-prone
+    if (a < 51) return [160, 38, 58];        // 46–50 very steep
+    return [122, 43, 208];                    // 51+ extreme
+  }
+  const SlopeLayer = L.GridLayer.extend({
+    createTile: function (coords, done) {
+      const size = this.getTileSize().x;
+      const tile = document.createElement('canvas');
+      tile.width = size; tile.height = size;
+      const ctx = tile.getContext('2d');
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const off = document.createElement('canvas');
+          off.width = size; off.height = size;
+          const octx = off.getContext('2d');
+          octx.drawImage(img, 0, 0, size, size);
+          const src = octx.getImageData(0, 0, size, size).data;
+          const elev = new Float32Array(size * size);
+          for (let i = 0; i < size * size; i++) {
+            elev[i] = (src[i * 4] * 256 + src[i * 4 + 1] + src[i * 4 + 2] / 256) - 32768;
+          }
+          // metres per pixel at this tile's latitude and zoom (web-mercator)
+          const n = Math.pow(2, coords.z);
+          const latRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * (coords.y + 0.5) / n)));
+          const mpp = 156543.03392 * Math.cos(latRad) / n;
+          const out = ctx.createImageData(size, size), o = out.data;
+          for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+              const xl = x > 0 ? x - 1 : x, xr = x < size - 1 ? x + 1 : x;
+              const yu = y > 0 ? y - 1 : y, yd = y < size - 1 ? y + 1 : y;
+              const dzdx = (elev[y * size + xr] - elev[y * size + xl]) / ((xr - xl) * mpp);
+              const dzdy = (elev[yd * size + x] - elev[yu * size + x]) / ((yd - yu) * mpp);
+              const slope = Math.atan(Math.hypot(dzdx, dzdy)) * 180 / Math.PI;
+              const c = slopeColor(slope);
+              if (c) { const i = (y * size + x) * 4; o[i] = c[0]; o[i + 1] = c[1]; o[i + 2] = c[2]; o[i + 3] = 115; }
+            }
+          }
+          ctx.putImageData(out, 0, 0);
+          done(null, tile);
+        } catch (e) { done(e, tile); }
+      };
+      img.onerror = () => done(null, tile); // transparent where there's no tile (ocean/edge)
+      img.src = TERR.replace('{z}', coords.z).replace('{x}', coords.x).replace('{y}', coords.y);
+      return tile;
+    }
+  });
+  const layer = new SlopeLayer({ zIndex: 300, minNativeZoom: 8, maxNativeZoom: 13, tileSize: 256 });
+  const cb = document.getElementById('slope-toggle');
+  const status = document.getElementById('slope-status');
+  if (cb) cb.addEventListener('change', () => {
+    if (cb.checked) { layer.addTo(map); status.textContent = '· live'; status.className = ''; }
+    else { map.removeLayer(layer); status.textContent = ''; }
   });
 })();
 </script>
