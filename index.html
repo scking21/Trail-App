@@ -2388,6 +2388,7 @@ renderPlanner();
           `<div style="font-size:12px;color:#555;margin-bottom:8px">` +
           `${fmtDist(t.dist)} · +${t.gain} m · ${fmtDur(t.dur)}</div>` +
           `<button class="tr-fol" style="width:100%;padding:6px;border:1px solid #1f6feb;background:#1f6feb;color:#fff;border-radius:6px;font-size:12px;cursor:pointer;margin-bottom:6px">▶ Follow (off-route alerts)</button>` +
+          `<button class="tr-trail" style="width:100%;padding:6px;border:1px solid #8a5a00;background:#fff;color:#8a5a00;border-radius:6px;font-size:12px;cursor:pointer;margin-bottom:6px">🥾 Save as Trail</button>` +
           `<div style="display:flex;gap:6px">` +
           `<button class="tr-exp" style="flex:1;padding:6px;border:1px solid #2e6b34;background:#2e6b34;color:#fff;border-radius:6px;font-size:12px;cursor:pointer">Export GPX</button>` +
           `<button class="tr-del" style="padding:6px 8px;border:1px solid #e0a39a;background:#fff;color:#c0392b;border-radius:6px;font-size:12px;cursor:pointer">Delete</button>` +
@@ -2395,7 +2396,9 @@ renderPlanner();
         pl.on('popupopen', e => {
           const root = e.popup.getElement();
           const exp = root.querySelector('.tr-exp'), del = root.querySelector('.tr-del'), fol = root.querySelector('.tr-fol');
+          const trailBtn = root.querySelector('.tr-trail');
           if (fol) fol.onclick = () => startFollow(t);
+          if (trailBtn) trailBtn.onclick = () => { window.map.closePopup(); window.MyTrails && window.MyTrails.createFrom(t); };
           if (exp) exp.onclick = () => exportTrack(t);
           if (del) del.onclick = () => {
             if (!window.confirm('Delete this track?')) return;
@@ -2493,6 +2496,7 @@ renderPlanner();
     window.Tracks = {
       all: () => tracks.map(t => ({ ...t })),
       follow: (id) => { const t = tracks.find(x => x.id === id); if (t) startFollow(t); },
+      followObj: (o) => { if (o && o.segments) startFollow(o); }, // follow any {name, segments}
       stopFollow,
       focus: (id) => {
         const t = tracks.find(x => x.id === id); if (!t) return;
@@ -2505,6 +2509,147 @@ renderPlanner();
     };
 
     renderSaved();
+  }
+
+  // ---- My Trails: submit your own trail (from a recorded track), saved offline ----
+  // A personal trail = a track promoted with a name, difficulty, and notes. Renders
+  // a coloured line + trailhead pin you can tap for detail, follow, export, or delete.
+  function buildMyTrailsUI(mapEl) {
+    const MT_KEY = 'trailapp.mytrails';
+    const DIFFC = { easy: '#2e8b57', moderate: '#2a6fb0', hard: '#c0392b' };
+    const toMi = m => m / 1609.34, toFt = m => m * 3.28084;
+    const fmtDur = s => { s = Math.max(0, Math.round(s || 0)); const h = Math.floor(s / 3600), mn = Math.floor((s % 3600) / 60); return h ? h + 'h ' + mn + 'm' : mn + 'm'; };
+    let trails = [];
+    try { trails = JSON.parse(localStorage.getItem(MT_KEY) || '[]') || []; } catch {}
+    const saveStore = () => { try { localStorage.setItem(MT_KEY, JSON.stringify(trails)); } catch {} };
+    const layer = L.layerGroup().addTo(window.map);
+    const headIcon = (diff) => L.divIcon({ className: 'trail-end',
+      html: `<div class="te" style="background:${DIFFC[diff] || '#666'};color:#fff">🥾</div>`, iconSize: [26, 26], iconAnchor: [13, 13] });
+
+    // ---- create/edit modal ----
+    const overlay = document.createElement('div');
+    Object.assign(overlay.style, { position: 'fixed', inset: '0', zIndex: 2000, display: 'none',
+      background: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: '20px' });
+    overlay.innerHTML = `
+      <div style="background:#fff;border-radius:14px;max-width:360px;width:100%;padding:18px 20px;box-shadow:0 10px 40px rgba(0,0,0,0.3);font-family:inherit;color:#2b2a26">
+        <h3 id="mt-title" style="margin:0 0 4px;font-size:17px">Save as Trail</h3>
+        <p id="mt-stats" style="margin:0 0 12px;font-size:12px;color:#7a766c"></p>
+        <label style="display:block;font-size:11px;color:#7a766c;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Trail name</label>
+        <input id="mt-name" type="text" maxlength="80" placeholder="e.g. Ridgeline Loop"
+          style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #d8d2c4;border-radius:8px;font-size:15px;font-family:inherit;margin-bottom:12px">
+        <label style="display:block;font-size:11px;color:#7a766c;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Difficulty</label>
+        <select id="mt-diff" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #d8d2c4;border-radius:8px;font-size:15px;font-family:inherit;margin-bottom:12px;background:#fff">
+          <option value="easy">Easy</option><option value="moderate">Moderate</option><option value="hard">Hard</option>
+        </select>
+        <label style="display:block;font-size:11px;color:#7a766c;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Notes (optional)</label>
+        <textarea id="mt-notes" rows="3" maxlength="500" placeholder="Conditions, water, parking, hazards…"
+          style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #d8d2c4;border-radius:8px;font-size:14px;font-family:inherit;margin-bottom:14px;resize:vertical"></textarea>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button id="mt-cancel" style="padding:9px 14px;border:1px solid #d8d2c4;background:#fff;border-radius:8px;font-size:14px;cursor:pointer">Cancel</button>
+          <button id="mt-save" style="padding:9px 16px;border:none;background:#2e6b34;color:#fff;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Save trail</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const q = id => overlay.querySelector('#' + id);
+    let editing = null, pending = null;
+    function close() { overlay.style.display = 'none'; editing = null; pending = null; }
+    q('mt-cancel').addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+    function openModal(opts) {
+      editing = opts.edit || null;
+      pending = opts.from || null;
+      const src = editing || pending;
+      q('mt-title').textContent = editing ? 'Edit trail' : 'Save as Trail';
+      const mi = toMi(src.dist || 0), ft = toFt(src.gain || 0);
+      q('mt-stats').textContent = `${mi.toFixed(2)} mi · +${Math.round(ft).toLocaleString()} ft · ${fmtDur(src.dur)}`;
+      q('mt-name').value = editing ? (editing.name || '') : (pending.name || '');
+      q('mt-diff').value = (editing && editing.diff) || (pending.dist ? (toMi(pending.dist) < 3 ? 'easy' : toMi(pending.dist) <= 7 ? 'moderate' : 'hard') : 'moderate');
+      q('mt-notes').value = editing ? (editing.notes || '') : '';
+      overlay.style.display = 'flex';
+      setTimeout(() => q('mt-name').focus(), 30);
+    }
+    q('mt-save').addEventListener('click', () => {
+      const name = q('mt-name').value.trim() || 'My Trail';
+      const diff = q('mt-diff').value, notes = q('mt-notes').value.trim();
+      if (editing) { editing.name = name; editing.diff = diff; editing.notes = notes; }
+      else if (pending) {
+        const seg0 = (pending.segments && pending.segments[0]) || [];
+        const start = seg0[0] || {};
+        trails.push({ id: 'mt' + Date.now(), name, diff, notes,
+          dist: pending.dist || 0, gain: pending.gain || 0, dur: pending.dur || 0,
+          lat: start.lat, lon: start.lon, segments: pending.segments || [], ts: Date.now() });
+      }
+      saveStore(); render(); close();
+    });
+
+    function trailGPX(t) {
+      const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const segs = (t.segments || []).map(s => '    <trkseg>\n' + s.map(p =>
+        `      <trkpt lat="${(+p.lat).toFixed(6)}" lon="${(+p.lon).toFixed(6)}">${p.ele != null ? `\n        <ele>${(+p.ele).toFixed(1)}</ele>` : ''}\n      </trkpt>`).join('\n') + '\n    </trkseg>').join('\n');
+      const desc = t.notes ? `\n    <desc>${esc(t.notes)}</desc>` : '';
+      return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Trail App" xmlns="http://www.topografix.com/GPX/1/1">\n  <trk>\n    <name>${esc(t.name)}</name>${desc}\n${segs}\n  </trk>\n</gpx>\n`;
+    }
+    function exportTrail(t) {
+      const fname = (t.name.replace(/[^\w-]+/g, '_').slice(0, 40) || 'trail') + '.gpx';
+      const blob = new Blob([trailGPX(t)], { type: 'application/gpx+xml' });
+      try {
+        if (navigator.canShare && typeof File !== 'undefined') {
+          const file = new File([blob], fname, { type: 'application/gpx+xml' });
+          if (navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: t.name }).catch(() => {}); return; }
+        }
+      } catch (e) {}
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = fname;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function render() {
+      layer.clearLayers();
+      const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      trails.forEach(t => {
+        const latlngs = (t.segments || []).map(s => s.map(p => [p.lat, p.lon]));
+        L.polyline(latlngs, { color: DIFFC[t.diff] || '#666', weight: 4, opacity: 0.9 }).addTo(layer);
+        if (t.lat == null || t.lon == null) return;
+        const mi = toMi(t.dist), ft = toFt(t.gain);
+        const m = L.marker([t.lat, t.lon], { icon: headIcon(t.diff), title: t.name }).addTo(layer);
+        m.bindPopup(
+          `<div style="font-family:inherit;min-width:190px">` +
+          `<div style="font-weight:700;margin-bottom:2px">🥾 ${esc(t.name)}</div>` +
+          `<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:${DIFFC[t.diff]};font-weight:700;margin-bottom:4px">${esc(t.diff)}</div>` +
+          `<div style="font-size:12px;color:#555;margin-bottom:6px">${mi.toFixed(2)} mi · +${Math.round(ft).toLocaleString()} ft · ${fmtDur(t.dur)}</div>` +
+          (t.notes ? `<div style="font-size:12px;color:#333;margin-bottom:8px;white-space:pre-wrap">${esc(t.notes)}</div>` : '') +
+          `<button class="mt-fol" style="width:100%;padding:6px;border:1px solid #1f6feb;background:#1f6feb;color:#fff;border-radius:6px;font-size:12px;cursor:pointer;margin-bottom:6px">▶ Follow (off-route alerts)</button>` +
+          `<div style="display:flex;gap:6px">` +
+          `<button class="mt-exp" style="flex:1;padding:6px;border:1px solid #2e6b34;background:#2e6b34;color:#fff;border-radius:6px;font-size:12px;cursor:pointer">Export</button>` +
+          `<button class="mt-edit" style="padding:6px 8px;border:1px solid #c9c2b2;background:#fff;border-radius:6px;font-size:12px;cursor:pointer">Edit</button>` +
+          `<button class="mt-del" style="padding:6px 8px;border:1px solid #e0a39a;background:#fff;color:#c0392b;border-radius:6px;font-size:12px;cursor:pointer">Delete</button>` +
+          `</div></div>`);
+        m.on('popupopen', e => {
+          const root = e.popup.getElement();
+          const fol = root.querySelector('.mt-fol'), exp = root.querySelector('.mt-exp'),
+                ed = root.querySelector('.mt-edit'), del = root.querySelector('.mt-del');
+          if (fol) fol.onclick = () => { window.map.closePopup(); window.Tracks && window.Tracks.followObj(t); };
+          if (exp) exp.onclick = () => exportTrail(t);
+          if (ed) ed.onclick = () => { window.map.closePopup(); openModal({ edit: t }); };
+          if (del) del.onclick = () => { if (!window.confirm('Delete this trail?')) return;
+            trails = trails.filter(x => x.id !== t.id); saveStore(); window.map.closePopup(); render(); };
+        });
+      });
+    }
+
+    window.MyTrails = {
+      all: () => trails.map(t => ({ ...t })),
+      createFrom: (track) => openModal({ from: track }),
+      focus: (id) => { const t = trails.find(x => x.id === id); if (!t) return;
+        const pts = (t.segments || []).flat().map(p => [p.lat, p.lon]);
+        const mapTab = document.querySelector('nav button[data-tab="map"]'); if (mapTab) mapTab.click();
+        if (pts.length) window.map.fitBounds(L.latLngBounds(pts), { padding: [40, 40] }); },
+      exportGPX: (id) => { const t = trails.find(x => x.id === id); if (t) exportTrail(t); },
+      remove: (id) => { trails = trails.filter(x => x.id !== id); saveStore(); render(); }
+    };
+    render();
   }
 
   window.addEventListener('DOMContentLoaded', () => {
@@ -2528,6 +2673,7 @@ renderPlanner();
     buildEmergencyUI(mapEl);
     buildWaypointUI(mapEl);
     buildTrackUI(mapEl);
+    buildMyTrailsUI(mapEl);
   });
 })();
 </script>
