@@ -386,6 +386,10 @@
 <div class="tab active" id="tab-map">
   <div id="map"></div>
   <aside>
+    <section id="mode-presets">
+      <h2>Map Mode <span style="font-weight:400;color:var(--muted);font-size:11px">· one-tap layers</span></h2>
+      <div id="mode-btns" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    </section>
     <section>
       <h2>Land Layers <span id="land-status" title="PAD-US live data status"></span></h2>
       <label class="layer-row"><input type="checkbox" checked data-layer="nf"><span class="swatch" style="background:#a8c8a0"></span>National Forest</label>
@@ -1785,6 +1789,55 @@ regionSelect.addEventListener('change', e => {
 
 // STATES now exists, so the planner (which derives permit area from it) can render.
 renderPlanner();
+
+// ---------- Map Mode presets: one-tap layer sets (Adventure Modes) ----------
+// A preset lists the toggles to switch ON; every other known layer is switched
+// OFF, so each mode is deterministic. Setting .checked + firing 'change' drives
+// the same overlay load/unload path a manual click does.
+(function () {
+  const SEL = {
+    land: k => `input[data-layer="${k}"]`, cad: k => `input[data-cad="${k}"]`,
+    poi: k => `input[data-poi="${k}"]`, camp: k => `input[data-camp="${k}"]`,
+    trails: k => `input[data-trails="${k}"]`, offroad: k => `input[data-offroad="${k}"]`,
+    endpoints: () => '#endpoints-toggle'
+  };
+  const selFor = key => { const [grp, k] = key.split(':'); return SEL[grp] ? SEL[grp](k) : null; };
+  // every toggle the presets manage, so "not in the ON list" means OFF
+  const ALL = ['land:nf', 'land:nps', 'land:wild', 'land:blm', 'land:sp', 'land:priv',
+    'cad:parcels', 'cad:esmt', 'poi:th', 'poi:vc', 'poi:rs',
+    'camp:water', 'camp:cg', 'camp:rv', 'camp:bc', 'trails:usgs', 'trails:run', 'trails:mtb',
+    'offroad:ohv', 'endpoints'];
+  const PRESETS = [
+    { id: 'hike', label: '🥾 Hike', on: ['land:nf', 'land:nps', 'land:wild', 'land:blm', 'land:sp', 'land:priv', 'cad:esmt', 'poi:th', 'trails:usgs', 'endpoints'] },
+    { id: 'overland', label: '🚙 Overland', on: ['land:nf', 'land:blm', 'land:wild', 'land:priv', 'cad:parcels', 'poi:rs', 'camp:water', 'camp:bc', 'camp:rv', 'offroad:ohv', 'endpoints'] },
+    { id: 'camp', label: '⛺ Camp', on: ['land:nf', 'land:blm', 'land:sp', 'poi:th', 'camp:cg', 'camp:rv', 'camp:bc', 'camp:water'] },
+    { id: 'backcountry', label: '🏔 Backcountry', on: ['land:wild', 'land:nf', 'land:blm', 'poi:rs', 'poi:th', 'camp:water', 'camp:bc', 'trails:usgs', 'endpoints'] }
+  ];
+  function applyPreset(p) {
+    const want = new Set(p.on);
+    ALL.forEach(key => {
+      const el = document.querySelector(selFor(key));
+      if (!el) return;
+      const next = want.has(key);
+      if (el.checked !== next) { el.checked = next; el.dispatchEvent(new Event('change', { bubbles: true })); }
+    });
+    document.querySelectorAll('#mode-btns .mode-btn').forEach(b => {
+      const active = b.dataset.id === p.id;
+      b.style.background = active ? 'var(--accent)' : '#fff';
+      b.style.color = active ? '#fff' : 'var(--accent)';
+    });
+    try { localStorage.setItem('trailapp.mapmode', p.id); } catch {}
+  }
+  const wrap = document.getElementById('mode-btns');
+  if (wrap) PRESETS.forEach(p => {
+    const b = document.createElement('button');
+    b.className = 'mode-btn'; b.dataset.id = p.id; b.textContent = p.label;
+    Object.assign(b.style, { padding: '6px 10px', border: '1px solid var(--accent)', borderRadius: '16px',
+      background: '#fff', color: 'var(--accent)', fontSize: '12px', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' });
+    b.addEventListener('click', () => applyPreset(p));
+    wrap.appendChild(b);
+  });
+})();
 </script>
 <!-- ================= Capacitor native bridge ================= -->
 <script>
