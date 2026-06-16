@@ -499,7 +499,15 @@
       <h2>Trip Plan</h2>
       <button id="plan-clear" title="Remove all trails">Clear all</button>
     </div>
-    <p class="planner-sub">Trails you’ve added build an itinerary with running totals. Click any trailhead on the map and choose <strong>Add to Plan</strong>. Saved on this device.</p>
+    <p class="planner-sub">Trails you’ve added build an itinerary with running totals. Click any trailhead on the map and choose <strong>Add to Plan</strong>.</p>
+    <div class="planner-head" style="margin:0 0 12px">
+      <span id="plan-saved" style="font-size:12px;color:var(--accent)">✓ Auto-saved on this device</span>
+      <div style="display:flex;gap:14px;align-items:center">
+        <button id="plan-backup" title="Save your whole trip to a file you can back up, move to a new phone, or share">⬇ Back up trip</button>
+        <button id="plan-restore" title="Restore a trip from a backup file">Restore</button>
+      </div>
+    </div>
+    <input id="plan-file" type="file" accept="application/json,.json" style="display:none">
     <div class="plan-totals">
       <div class="pt"><div class="pt-val" id="pt-count">0</div><div class="pt-lab">Trails</div></div>
       <div class="pt"><div class="pt-val" id="pt-dist">0.0 mi</div><div class="pt-lab">Distance</div></div>
@@ -2200,6 +2208,64 @@ window.__toolCluster = toolCluster;
   playBtn.addEventListener('click', () => setPlaying(!playing));
   seek.addEventListener('input', () => { setPlaying(false); show(+seek.value); });
   if (cb) cb.addEventListener('change', () => { if (cb.checked) enable(); else disable(); });
+})();
+
+// ---------- Back up / restore the whole trip (portable file) ----------
+// Everything is already auto-saved to localStorage; this bundles it into one
+// file so progress survives reinstalls / new devices and can be shared.
+(function () {
+  const KEYS = ['trailapp.plan.v1', 'trailapp.triptype', 'trailapp.gear',
+    'trailapp.waypoints', 'trailapp.tracks', 'trailapp.mytrails', 'trailapp.mapmode'];
+  const backupBtn = document.getElementById('plan-backup');
+  const restoreBtn = document.getElementById('plan-restore');
+  const fileInput = document.getElementById('plan-file');
+  const saved = document.getElementById('plan-saved');
+  if (!backupBtn) return;
+  const flash = (msg, ok) => { if (!saved) return; const o = saved.textContent;
+    saved.textContent = msg; saved.style.color = ok === false ? '#c0392b' : 'var(--accent)';
+    setTimeout(() => { saved.textContent = o; saved.style.color = 'var(--accent)'; }, 4000); };
+
+  backupBtn.addEventListener('click', () => {
+    const data = {};
+    KEYS.forEach(k => { const v = localStorage.getItem(k); if (v != null) data[k] = v; });
+    const payload = { app: 'trail-app', kind: 'trip-backup', version: 1, savedAt: new Date().toISOString(), data };
+    const fname = 'trail-app-trip-' + new Date().toISOString().slice(0, 10) + '.json';
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    try {
+      if (navigator.canShare && typeof File !== 'undefined') {
+        const file = new File([blob], fname, { type: 'application/json' });
+        if (navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: 'Trail App trip backup' }).catch(() => {}); flash('✓ Trip backed up'); return; }
+      }
+    } catch (e) { /* fall through to download */ }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    flash('✓ Trip backed up');
+  });
+
+  restoreBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      fileInput.value = '';
+      let payload;
+      try { payload = JSON.parse(String(reader.result)); } catch { flash('Couldn’t read that file', false); return; }
+      if (!payload || payload.app !== 'trail-app' || payload.kind !== 'trip-backup' || !payload.data) {
+        flash('Not a Trail App backup file', false); return;
+      }
+      const when = payload.savedAt ? new Date(payload.savedAt).toLocaleString() : 'unknown date';
+      if (!window.confirm(`Restore this trip backup (saved ${when})?\n\nThis replaces your current plan, waypoints, tracks, and saved trails on this device.`)) return;
+      try {
+        KEYS.forEach(k => { if (k in payload.data) localStorage.setItem(k, payload.data[k]); else localStorage.removeItem(k); });
+      } catch { flash('Restore failed (storage full?)', false); return; }
+      window.location.reload(); // every module re-reads from localStorage on load
+    };
+    reader.onerror = () => { flash('Couldn’t read that file', false); fileInput.value = ''; };
+    reader.readAsText(file);
+  });
 })();
 </script>
 <!-- ================= Capacitor native bridge ================= -->
