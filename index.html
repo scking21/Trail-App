@@ -2188,6 +2188,236 @@ renderPlanner();
     if (window.renderWaypointList) { window.Waypoints.onChange(window.renderWaypointList); window.renderWaypointList(); }
   }
 
+  // ---- Track recording: record the path you actually walk/drive ----
+  // Watches GPS, accumulates points into pause-delimited segments, draws a live
+  // polyline, and saves finished tracks to localStorage. Exports as GPX <trk>.
+  function buildTrackUI(mapEl) {
+    const TR_KEY = 'trailapp.tracks';
+    const MIN_MOVE = 5;     // metres — drop jitter between fixes
+    const MAX_ACC = 50;     // metres — ignore low-accuracy fixes
+    const GAIN_MIN = 1;     // metres — ignore altitude noise below this per step
+    const dist = (a, b) => (window.Geo ? window.Geo.distance(a, b) : 0);
+    const fmtDist = m => (window.Geo ? window.Geo.formatDistance(m) : Math.round(m) + ' m');
+    const fmtDur = s => {
+      s = Math.max(0, Math.round(s));
+      const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+      return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(ss).padStart(2, '0');
+    };
+
+    let tracks = [];
+    try { tracks = JSON.parse(localStorage.getItem(TR_KEY) || '[]') || []; } catch {}
+    const saveStore = () => { try { localStorage.setItem(TR_KEY, JSON.stringify(tracks)); } catch {} };
+    const savedLayer = L.layerGroup().addTo(window.map);
+
+    // ---- recording state ----
+    let recording = false, paused = false, watchId = null, startTs = 0, timer = null;
+    let segments = [];          // [[{lat,lon,ele,ts}, ...], ...]
+    let totalDist = 0, totalGain = 0, ptCount = 0;
+    let liveLine = null;        // L.polyline for the segment in progress
+
+    function statValue(label, id) {
+      return `<div style="text-align:center"><div id="${id}" style="font-size:17px;font-weight:700">—</div>` +
+             `<div style="font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:#cdd6cf">${label}</div></div>`;
+    }
+    const hud = document.createElement('div');
+    Object.assign(hud.style, {
+      position: 'absolute', zIndex: 1001, left: '12px', bottom: '20px', display: 'none',
+      background: '#1f3a24', color: '#fff', borderRadius: '12px', padding: '10px 12px',
+      boxShadow: '0 2px 10px rgba(0,0,0,0.3)', fontFamily: 'inherit', minWidth: '210px'
+    });
+    hud.innerHTML =
+      `<div style="display:flex;gap:14px;justify-content:space-between;margin-bottom:8px">` +
+        statValue('Time', 'tr-time') + statValue('Distance', 'tr-dist') +
+        statValue('Gain', 'tr-gain') + statValue('Points', 'tr-pts') + `</div>` +
+      `<div style="display:flex;gap:8px">` +
+        `<button id="tr-pause" style="flex:1;padding:7px;border:none;border-radius:8px;background:#caa43a;color:#1f3a24;font-weight:600;font-size:13px;cursor:pointer">Pause</button>` +
+        `<button id="tr-stop" style="flex:1;padding:7px;border:none;border-radius:8px;background:#c0392b;color:#fff;font-weight:600;font-size:13px;cursor:pointer">Stop &amp; save</button>` +
+      `</div>`;
+    mapEl.appendChild(hud);
+    const hq = id => hud.querySelector('#' + id);
+
+    // Floating record button (top of the right-side stack, above 📌 at 182px).
+    const btn = document.createElement('button');
+    btn.id = 'track-btn';
+    btn.title = 'Record a track';
+    btn.textContent = '⏺';
+    btn.setAttribute('aria-label', 'Record a track');
+    Object.assign(btn.style, {
+      position: 'absolute', zIndex: 1000, right: '12px', bottom: '236px',
+      width: '46px', height: '46px', borderRadius: '50%', border: '1px solid #cfcabd',
+      background: '#fff', fontSize: '20px', color: '#c0392b', cursor: 'pointer',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.25)'
+    });
+    mapEl.appendChild(btn);
+
+    function updateHud() {
+      hq('tr-time').textContent = fmtDur((Date.now() - startTs) / 1000);
+      hq('tr-dist').textContent = fmtDist(totalDist);
+      hq('tr-gain').textContent = totalGain ? '+' + Math.round(totalGain) + ' m' : '—';
+      hq('tr-pts').textContent = ptCount;
+    }
+
+    function onFix(coords) {
+      if (!recording || paused) return;
+      if (coords.accuracy != null && coords.accuracy > MAX_ACC) return;
+      const seg = segments[segments.length - 1];
+      const last = seg[seg.length - 1];
+      const pt = { lat: coords.latitude, lon: coords.longitude,
+                   ele: (coords.altitude != null && isFinite(coords.altitude)) ? coords.altitude : null,
+                   ts: Date.now() };
+      if (last) {
+        const d = dist({ latitude: last.lat, longitude: last.lon }, { latitude: pt.lat, longitude: pt.lon });
+        if (d < MIN_MOVE) return;             // ignore jitter while stationary
+        totalDist += d;
+        if (last.ele != null && pt.ele != null) {
+          const dz = pt.ele - last.ele;
+          if (dz > GAIN_MIN) totalGain += dz;
+        }
+      }
+      seg.push(pt); ptCount++;
+      if (liveLine) liveLine.addLatLng([pt.lat, pt.lon]);
+      updateHud();
+    }
+
+    function beginSegment() {
+      segments.push([]);
+      liveLine = L.polyline([], { color: '#c0392b', weight: 4, opacity: 0.9 }).addTo(window.map);
+    }
+
+    async function startWatch() {
+      if (isNative && Cap.Plugins && Cap.Plugins.Geolocation) {
+        watchId = await Cap.Plugins.Geolocation.watchPosition(
+          { enableHighAccuracy: true }, (pos, err) => { if (pos && pos.coords) onFix(pos.coords); });
+      } else if (navigator.geolocation) {
+        watchId = navigator.geolocation.watchPosition(
+          p => onFix(p.coords), e => {}, { enableHighAccuracy: true, maximumAge: 0 });
+      }
+    }
+    async function stopWatch() {
+      try {
+        if (isNative && Cap.Plugins && Cap.Plugins.Geolocation && watchId != null) {
+          await Cap.Plugins.Geolocation.clearWatch({ id: watchId });
+        } else if (watchId != null && navigator.geolocation) {
+          navigator.geolocation.clearWatch(watchId);
+        }
+      } catch {}
+      watchId = null;
+    }
+
+    async function start() {
+      recording = true; paused = false; startTs = Date.now();
+      segments = []; totalDist = 0; totalGain = 0; ptCount = 0;
+      beginSegment();
+      btn.style.display = 'none';
+      hud.style.display = 'block';
+      hq('tr-pause').textContent = 'Pause';
+      updateHud();
+      timer = setInterval(() => { if (!paused) updateHud(); }, 1000);
+      await startWatch();
+    }
+
+    async function stop() {
+      await stopWatch();
+      clearInterval(timer); timer = null;
+      recording = false; paused = false;
+      hud.style.display = 'none';
+      btn.style.display = 'block';
+      // drop the live preview lines; saved render takes over
+      segments.forEach(() => {}); // segments kept for save
+      if (liveLine) { window.map.removeLayer(liveLine); liveLine = null; }
+      // also clear any other in-progress preview lines
+      const pts = segments.reduce((n, s) => n + s.length, 0);
+      if (pts < 2) { renderSaved(); return; }
+      const def = 'Track ' + new Date(startTs).toLocaleString();
+      const name = (window.prompt('Name this track:', def) || def).trim() || def;
+      tracks.push({
+        id: 'tr' + startTs, name, ts: startTs,
+        dist: Math.round(totalDist), gain: Math.round(totalGain),
+        dur: Math.round((Date.now() - startTs) / 1000),
+        segments: segments.map(s => s.map(p => ({ lat: +p.lat.toFixed(6), lon: +p.lon.toFixed(6), ele: p.ele, ts: p.ts })))
+      });
+      saveStore(); renderSaved();
+    }
+
+    function pauseToggle() {
+      if (!recording) return;
+      paused = !paused;
+      hq('tr-pause').textContent = paused ? 'Resume' : 'Pause';
+      if (!paused) beginSegment();   // new segment so the gap isn't drawn as a line
+    }
+
+    btn.addEventListener('click', () => { if (!recording) start(); });
+    hq('tr-pause').addEventListener('click', pauseToggle);
+    hq('tr-stop').addEventListener('click', stop);
+
+    // ---- saved tracks: redraw + tap for stats/export/delete ----
+    function trackGPX(t) {
+      const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const segs = t.segments.map(s => '    <trkseg>\n' + s.map(p => {
+        const ele = (p.ele != null) ? `\n        <ele>${(+p.ele).toFixed(1)}</ele>` : '';
+        const time = p.ts ? `\n        <time>${new Date(p.ts).toISOString()}</time>` : '';
+        return `      <trkpt lat="${(+p.lat).toFixed(6)}" lon="${(+p.lon).toFixed(6)}">${ele}${time}\n      </trkpt>`;
+      }).join('\n') + '\n    </trkseg>').join('\n');
+      return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Trail App" xmlns="http://www.topografix.com/GPX/1/1">\n  <trk>\n    <name>${esc(t.name)}</name>\n${segs}\n  </trk>\n</gpx>\n`;
+    }
+    function exportTrack(t) {
+      const fname = (t.name.replace(/[^\w-]+/g, '_').slice(0, 40) || 'track') + '.gpx';
+      const blob = new Blob([trackGPX(t)], { type: 'application/gpx+xml' });
+      try {
+        if (navigator.canShare && typeof File !== 'undefined') {
+          const file = new File([blob], fname, { type: 'application/gpx+xml' });
+          if (navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: t.name }).catch(() => {}); return; }
+        }
+      } catch (e) { /* fall through to download */ }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = fname;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    function renderSaved() {
+      savedLayer.clearLayers();
+      tracks.forEach(t => {
+        const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const latlngs = t.segments.map(s => s.map(p => [p.lat, p.lon]));
+        const pl = L.polyline(latlngs, { color: '#8a2a1f', weight: 4, opacity: 0.85 }).addTo(savedLayer);
+        const km = (t.dist / 1000);
+        pl.bindPopup(
+          `<div style="font-family:inherit;min-width:170px">` +
+          `<div style="font-weight:700;margin-bottom:4px">${esc(t.name)}</div>` +
+          `<div style="font-size:12px;color:#555;margin-bottom:8px">` +
+          `${fmtDist(t.dist)} · +${t.gain} m · ${fmtDur(t.dur)}</div>` +
+          `<div style="display:flex;gap:6px">` +
+          `<button class="tr-exp" style="flex:1;padding:6px;border:1px solid #2e6b34;background:#2e6b34;color:#fff;border-radius:6px;font-size:12px;cursor:pointer">Export GPX</button>` +
+          `<button class="tr-del" style="padding:6px 8px;border:1px solid #e0a39a;background:#fff;color:#c0392b;border-radius:6px;font-size:12px;cursor:pointer">Delete</button>` +
+          `</div></div>`);
+        pl.on('popupopen', e => {
+          const root = e.popup.getElement();
+          const exp = root.querySelector('.tr-exp'), del = root.querySelector('.tr-del');
+          if (exp) exp.onclick = () => exportTrack(t);
+          if (del) del.onclick = () => {
+            if (!window.confirm('Delete this track?')) return;
+            tracks = tracks.filter(x => x.id !== t.id); saveStore(); window.map.closePopup(); renderSaved();
+          };
+        });
+      });
+    }
+
+    window.Tracks = {
+      all: () => tracks.map(t => ({ ...t })),
+      focus: (id) => {
+        const t = tracks.find(x => x.id === id); if (!t) return;
+        const mapTab = document.querySelector('nav button[data-tab="map"]'); if (mapTab) mapTab.click();
+        const pts = t.segments.flat().map(p => [p.lat, p.lon]);
+        if (pts.length) window.map.fitBounds(L.latLngBounds(pts), { padding: [40, 40] });
+      },
+      exportGPX: (id) => { const t = tracks.find(x => x.id === id); if (t) exportTrack(t); },
+      remove: (id) => { tracks = tracks.filter(x => x.id !== id); saveStore(); renderSaved(); }
+    };
+
+    renderSaved();
+  }
+
   window.addEventListener('DOMContentLoaded', () => {
     const mapEl = document.getElementById('map');
     if (!mapEl) return;
@@ -2208,6 +2438,7 @@ renderPlanner();
     buildDownloadUI(mapEl);
     buildEmergencyUI(mapEl);
     buildWaypointUI(mapEl);
+    buildTrackUI(mapEl);
   });
 })();
 </script>
