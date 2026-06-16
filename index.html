@@ -1838,6 +1838,80 @@ renderPlanner();
     wrap.appendChild(b);
   });
 })();
+
+// ---------- Land ID: tap the map to see who manages the land (PAD-US) ----------
+// Point-queries the nationwide PAD-US layer at the tapped spot, independent of
+// which layers are toggled on. Answers "whose land am I on / can I be here?".
+(function () {
+  const AGENCY = { USFS: 'US Forest Service', NPS: 'National Park Service', BLM: 'Bureau of Land Management',
+    FWS: 'US Fish & Wildlife Service', USBR: 'Bureau of Reclamation', DOD: 'Dept. of Defense', DOE: 'Dept. of Energy',
+    TVA: 'Tennessee Valley Authority', NRCS: 'Natural Resources Conservation Service', ARS: 'Agricultural Research Service',
+    STAT: 'State', SDC: 'State Conservation', SDNR: 'State Natural Resources', SDOL: 'State Land Office',
+    SFW: 'State Fish & Wildlife', SPR: 'State Parks & Rec', OTHS: 'Other State', REG: 'Regional Agency',
+    CITY: 'City', CNTY: 'County', JNT: 'Joint', NGO: 'Non-Profit / Land Trust', PVT: 'Private', TRIB: 'Tribal', UNK: 'Unknown' };
+  const DESIG = { NF: 'National Forest', WA: 'Wilderness Area', NP: 'National Park', NM: 'National Monument',
+    SP: 'State Park', SW: 'State Wilderness', SRMA: 'Special Rec. Mgmt Area', ACEC: 'Area of Critical Env. Concern',
+    WSA: 'Wilderness Study Area', NRA: 'National Rec. Area', NWR: 'National Wildlife Refuge', LP: 'Local Park',
+    REC: 'Recreation Mgmt Area', RNA: 'Research Natural Area', UND: 'Unspecified' };
+  const ACCESS = { OA: '🟢 Open access', RA: '🟡 Restricted access', XA: '🔴 Closed', UK: '⚪ Access unknown' };
+  const acres = n => (typeof n === 'number' && isFinite(n))
+    ? (n >= 1000 ? Math.round(n).toLocaleString() : n.toFixed(n < 10 ? 1 : 0)) + ' acres' : '';
+
+  async function identify(latlng) {
+    const popup = L.popup({ maxWidth: 280 }).setLatLng(latlng)
+      .setContent('<div style="font-family:inherit;font-size:13px">Identifying land…</div>').openOn(map);
+    const e = 0.0002;
+    const env = `${latlng.lng - e},${latlng.lat - e},${latlng.lng + e},${latlng.lat + e}`;
+    let feats = [];
+    try {
+      const gj = await fetchGeoJSON(PADUS_URL, '1=1',
+        'Unit_Nm,Loc_Nm,Mang_Name,Own_Name,Des_Tp,GIS_Acres,Pub_Access,Date_Est', env, 0, 5);
+      feats = (gj.features || []).map(f => f.properties);
+    } catch { popup.setContent('<div style="font-family:inherit;font-size:13px">Couldn’t reach the land database (offline?).</div>'); return; }
+    if (!feats.length) {
+      popup.setContent('<div style="font-family:inherit;font-size:13px"><strong>No public-land record here</strong><br>' +
+        '<span style="color:#666">Likely private or unmapped land.</span></div>');
+      return;
+    }
+    feats.sort((a, b) => (a.GIS_Acres || Infinity) - (b.GIS_Acres || Infinity)); // most specific first
+    const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const rows = feats.slice(0, 3).map(p => {
+      const name = p.Unit_Nm || p.Loc_Nm || DESIG[p.Des_Tp] || 'Public land';
+      const agency = AGENCY[p.Mang_Name] || p.Mang_Name || '';
+      const desig = DESIG[p.Des_Tp] || '';
+      const meta = [desig, acres(p.GIS_Acres), p.Date_Est ? 'est. ' + p.Date_Est : ''].filter(Boolean).join(' · ');
+      const access = ACCESS[p.Pub_Access] || '';
+      return `<div style="padding:6px 0;border-top:1px solid #eee">` +
+        `<div style="font-weight:700">${esc(name)}</div>` +
+        (agency ? `<div style="font-size:12px;color:#2e6b34;font-weight:600">${esc(agency)}</div>` : '') +
+        (meta ? `<div style="font-size:12px;color:#555">${esc(meta)}</div>` : '') +
+        (access ? `<div style="font-size:12px;margin-top:2px">${access}</div>` : '') + `</div>`;
+    }).join('');
+    popup.setContent(`<div style="font-family:inherit;min-width:190px">` +
+      `<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#7a766c">Land ownership</div>${rows}</div>`);
+  }
+
+  let active = false;
+  function onMapClick(e) { identify(e.latlng); }
+  const mapEl = document.getElementById('map');
+  const btn = document.createElement('button');
+  btn.id = 'landid-btn';
+  btn.title = 'Land ID — tap the map to see who manages the land';
+  btn.textContent = 'ID';
+  btn.setAttribute('aria-label', 'Land ID mode');
+  Object.assign(btn.style, { position: 'absolute', zIndex: 1000, right: '12px', bottom: '290px',
+    width: '46px', height: '46px', borderRadius: '50%', border: '1px solid #cfcabd',
+    background: '#fff', fontSize: '15px', fontWeight: '700', color: '#2e6b34', cursor: 'pointer',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.25)' });
+  mapEl.appendChild(btn);
+  btn.addEventListener('click', () => {
+    active = !active;
+    btn.style.background = active ? '#2e6b34' : '#fff';
+    btn.style.color = active ? '#fff' : '#2e6b34';
+    if (map._container) map._container.style.cursor = active ? 'crosshair' : '';
+    if (active) map.on('click', onMapClick); else { map.off('click', onMapClick); map.closePopup(); }
+  });
+})();
 </script>
 <!-- ================= Capacitor native bridge ================= -->
 <script>
