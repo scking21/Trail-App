@@ -1862,33 +1862,66 @@ renderPlanner();
       .setContent('<div style="font-family:inherit;font-size:13px">Identifying land…</div>').openOn(map);
     const e = 0.0002;
     const env = `${latlng.lng - e},${latlng.lat - e},${latlng.lng + e},${latlng.lat + e}`;
-    let feats = [];
-    try {
-      const gj = await fetchGeoJSON(PADUS_URL, '1=1',
-        'Unit_Nm,Loc_Nm,Mang_Name,Own_Name,Des_Tp,GIS_Acres,Pub_Access,Date_Est', env, 0, 5);
-      feats = (gj.features || []).map(f => f.properties);
-    } catch { popup.setContent('<div style="font-family:inherit;font-size:13px">Couldn’t reach the land database (offline?).</div>'); return; }
-    if (!feats.length) {
-      popup.setContent('<div style="font-family:inherit;font-size:13px"><strong>No public-land record here</strong><br>' +
-        '<span style="color:#666">Likely private or unmapped land.</span></div>');
+    // Public land (PAD-US, nationwide) + county parcel owner (where we have a source).
+    const padP = fetchGeoJSON(PADUS_URL, '1=1',
+      'Unit_Nm,Loc_Nm,Mang_Name,Own_Name,Des_Tp,GIS_Acres,Pub_Access,Date_Est', env, 0, 5)
+      .then(gj => (gj.features || []).map(f => f.properties)).catch(() => null);
+    const parcelP = Promise.all((parcelSpec.sources || []).map(s =>
+      fetchGeoJSON(s.url, s.where || '1=1', s.outFields, env, 0, 1)
+        .then(gj => {
+          const f = gj.features && gj.features[0];
+          if (!f) return null;
+          const n = s.norm(f.properties);
+          const owner = (n.owner || '').trim();
+          // reject placeholder slivers (state land "NAP", blanks) — they aren't real owners
+          if (!owner || /^(nap|none|n\/?a|unknown|public)$/i.test(owner)) return null;
+          return n;
+        })
+        .catch(() => null)))
+      .then(rs => rs.find(Boolean) || null);
+    const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const wrap = inner => `<div style="font-family:inherit;min-width:190px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#7a766c">Land ownership</div>${inner}</div>`;
+    const padRows = feats => {
+      if (!feats || !feats.length) return '';
+      feats.sort((a, b) => (a.GIS_Acres || Infinity) - (b.GIS_Acres || Infinity)); // most specific first
+      return feats.slice(0, 3).map(p => {
+        const name = p.Unit_Nm || p.Loc_Nm || DESIG[p.Des_Tp] || 'Public land';
+        const agency = AGENCY[p.Mang_Name] || p.Mang_Name || '';
+        const meta = [DESIG[p.Des_Tp] || '', acres(p.GIS_Acres), p.Date_Est ? 'est. ' + p.Date_Est : ''].filter(Boolean).join(' · ');
+        const access = ACCESS[p.Pub_Access] || '';
+        return `<div style="padding:6px 0;border-top:1px solid #eee">` +
+          `<div style="font-weight:700">${esc(name)}</div>` +
+          (agency ? `<div style="font-size:12px;color:#2e6b34;font-weight:600">${esc(agency)}</div>` : '') +
+          (meta ? `<div style="font-size:12px;color:#555">${esc(meta)}</div>` : '') +
+          (access ? `<div style="font-size:12px;margin-top:2px">${access}</div>` : '') + `</div>`;
+      }).join('');
+    };
+    const parcelBlock = parcel => {
+      if (!parcel || !parcel.owner) return '';
+      const ac = (typeof parcel.acres === 'number' && isFinite(parcel.acres)) ? `${parcel.acres.toFixed(parcel.acres < 10 ? 1 : 0)} ac` : '';
+      const meta = [ac, parcel.parcel && 'Parcel ' + parcel.parcel].filter(Boolean).join(' · ');
+      return `<div style="padding:6px 0;border-top:1px solid #eee">` +
+        `<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#8a5a00">Parcel owner</div>` +
+        `<div style="font-weight:700">${esc(parcel.owner)}</div>` +
+        (parcel.address ? `<div style="font-size:12px;color:#555">${esc(parcel.address)}</div>` : '') +
+        (meta ? `<div style="font-size:12px;color:#555">${esc(meta)}</div>` : '') + `</div>`;
+    };
+
+    // Phase 1: PAD-US is one fast endpoint — paint it as soon as it lands.
+    const feats = await padP;
+    const rows = padRows(feats);
+    if (rows) popup.setContent(wrap(rows +
+      `<div style="padding:6px 0;border-top:1px solid #eee;font-size:12px;color:#999">Checking parcel owner…</div>`));
+    // Phase 2: county parcel sources are slower and optional — fill in when ready.
+    const parcel = await parcelP;
+    const pBlock = parcelBlock(parcel);
+    if (!rows && !pBlock) {
+      popup.setContent(feats === null
+        ? '<div style="font-family:inherit;font-size:13px">Couldn’t reach the land database (offline?).</div>'
+        : '<div style="font-family:inherit;font-size:13px"><strong>No public-land record here</strong><br><span style="color:#666">Likely private or unmapped land.</span></div>');
       return;
     }
-    feats.sort((a, b) => (a.GIS_Acres || Infinity) - (b.GIS_Acres || Infinity)); // most specific first
-    const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const rows = feats.slice(0, 3).map(p => {
-      const name = p.Unit_Nm || p.Loc_Nm || DESIG[p.Des_Tp] || 'Public land';
-      const agency = AGENCY[p.Mang_Name] || p.Mang_Name || '';
-      const desig = DESIG[p.Des_Tp] || '';
-      const meta = [desig, acres(p.GIS_Acres), p.Date_Est ? 'est. ' + p.Date_Est : ''].filter(Boolean).join(' · ');
-      const access = ACCESS[p.Pub_Access] || '';
-      return `<div style="padding:6px 0;border-top:1px solid #eee">` +
-        `<div style="font-weight:700">${esc(name)}</div>` +
-        (agency ? `<div style="font-size:12px;color:#2e6b34;font-weight:600">${esc(agency)}</div>` : '') +
-        (meta ? `<div style="font-size:12px;color:#555">${esc(meta)}</div>` : '') +
-        (access ? `<div style="font-size:12px;margin-top:2px">${access}</div>` : '') + `</div>`;
-    }).join('');
-    popup.setContent(`<div style="font-family:inherit;min-width:190px">` +
-      `<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#7a766c">Land ownership</div>${rows}</div>`);
+    popup.setContent(wrap(rows + pBlock));
   }
 
   let active = false;
@@ -2387,6 +2420,7 @@ renderPlanner();
     function onFix(coords) {
       if (!recording || paused) return;
       if (coords.accuracy != null && coords.accuracy > MAX_ACC) return;
+      if (followRoute && !followOwnWatch) onFollowFix(coords); // off-route check on the record watch
       const seg = segments[segments.length - 1];
       const last = seg[seg.length - 1];
       const pt = { lat: coords.latitude, lon: coords.longitude,
@@ -2447,6 +2481,9 @@ renderPlanner();
       await stopWatch();
       clearInterval(timer); timer = null;
       recording = false; paused = false;
+      // If we were following on the record watch, hand off to a dedicated follow
+      // watch so off-route alerts survive after recording stops.
+      if (followRoute && !followOwnWatch) { followOwnWatch = true; try { await startFollowWatch(); } catch {} }
       hud.style.display = 'none';
       btn.style.display = 'block';
       // drop the live preview lines; saved render takes over
@@ -2539,7 +2576,7 @@ renderPlanner();
     const OFF_M = 60;       // metres off the line before alerting
     const BACK_M = 45;      // metres to be considered back on route (hysteresis)
     let followRoute = null; // flat [{lat,lon}, ...] of the track being followed
-    let followWatch = null, followNative = false, offRoute = false;
+    let followWatch = null, followNative = false, offRoute = false, followOwnWatch = false;
 
     const banner = document.createElement('div');
     Object.assign(banner.style, {
@@ -2586,8 +2623,19 @@ renderPlanner();
         : `✓ On route — ${fmtDist(d)} away`;
     }
 
+    async function startFollowWatch() {
+      if (isNative && Cap.Plugins && Cap.Plugins.Geolocation) {
+        followNative = true;
+        followWatch = await Cap.Plugins.Geolocation.watchPosition(
+          { enableHighAccuracy: true }, (pos) => { if (pos && pos.coords) onFollowFix(pos.coords); });
+      } else if (navigator.geolocation) {
+        followNative = false;
+        followWatch = navigator.geolocation.watchPosition(
+          p => onFollowFix(p.coords), e => {}, { enableHighAccuracy: true, maximumAge: 0 });
+      }
+    }
     async function startFollow(t) {
-      stopFollow();
+      await stopFollow();
       followRoute = t.segments.flat().map(p => ({ lat: p.lat, lon: p.lon }));
       if (followRoute.length < 2) { followRoute = null; return; }
       offRoute = false;
@@ -2595,29 +2643,24 @@ renderPlanner();
       banner.textContent = `Following “${t.name}” — locating…`;
       banner.style.display = 'block';
       window.map.closePopup();
-      try {
-        if (isNative && Cap.Plugins && Cap.Plugins.Geolocation) {
-          followNative = true;
-          followWatch = await Cap.Plugins.Geolocation.watchPosition(
-            { enableHighAccuracy: true }, (pos) => { if (pos && pos.coords) onFollowFix(pos.coords); });
-        } else if (navigator.geolocation) {
-          followNative = false;
-          followWatch = navigator.geolocation.watchPosition(
-            p => onFollowFix(p.coords), e => {}, { enableHighAccuracy: true, maximumAge: 0 });
-        }
-      } catch {}
+      // While recording, the recorder's own GPS watch drives the off-route check
+      // (one watch — better battery). Otherwise follow runs its own watch.
+      if (recording) { followOwnWatch = false; }
+      else { followOwnWatch = true; try { await startFollowWatch(); } catch {} }
     }
     async function stopFollow() {
       followRoute = null; offRoute = false;
       banner.style.display = 'none';
-      try {
-        if (followNative && Cap.Plugins && Cap.Plugins.Geolocation && followWatch != null) {
-          await Cap.Plugins.Geolocation.clearWatch({ id: followWatch });
-        } else if (followWatch != null && navigator.geolocation) {
-          navigator.geolocation.clearWatch(followWatch);
-        }
-      } catch {}
-      followWatch = null;
+      if (followOwnWatch) {
+        try {
+          if (followNative && Cap.Plugins && Cap.Plugins.Geolocation && followWatch != null) {
+            await Cap.Plugins.Geolocation.clearWatch({ id: followWatch });
+          } else if (followWatch != null && navigator.geolocation) {
+            navigator.geolocation.clearWatch(followWatch);
+          }
+        } catch {}
+      }
+      followWatch = null; followOwnWatch = false;
     }
 
     window.Tracks = {
