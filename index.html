@@ -555,6 +555,18 @@
       </div>
       <p class="kit-note">Hazards are based on the region of your planned trails (or the current map view) and are general guidance — always check local conditions, closures, and seasonal warnings. Gear ticks are saved on this device.</p>
     </div>
+
+    <div class="trip-kit" id="privacy-section">
+      <h2 style="margin:0 0 4px;font-size:17px">🔒 Privacy &amp; data</h2>
+      <p class="planner-sub" style="margin-bottom:12px">Your location stays on your device. Plans, waypoints, recorded tracks, and saved trails are stored only on this phone — never uploaded. Your live GPS is used on-device to center the map, record, and warn you off-route; it is never sent to a server.</p>
+      <ul style="margin:0 0 12px;padding-left:18px;font-size:13px;color:var(--muted);line-height:1.5">
+        <li>The map, land, weather, and forecast layers fetch live data for the area you’re viewing or the point you tap — that reveals <em>what you look at</em> to those data providers, but not where you are.</li>
+        <li>Backups and GPX files you export contain precise coordinates — only you choose when to share them.</li>
+      </ul>
+      <label class="layer-row" style="margin-bottom:14px"><input type="checkbox" id="privacy-striptime"><span></span>Strip timestamps from exported track GPX (hides <em>when</em> you were there)</label>
+      <button id="privacy-wipe" style="padding:9px 14px;border:1px solid #c0392b;background:#fff;color:#c0392b;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Delete all my data on this device</button>
+      <p id="privacy-status" style="margin:10px 0 0;font-size:12px;color:var(--accent);min-height:15px"></p>
+    </div>
   </div>
 </div>
 
@@ -2267,6 +2279,29 @@ window.__toolCluster = toolCluster;
     reader.readAsText(file);
   });
 })();
+
+// ---------- Privacy controls: export-timestamp preference + wipe all data ----------
+(function () {
+  const strip = document.getElementById('privacy-striptime');
+  const wipe = document.getElementById('privacy-wipe');
+  const status = document.getElementById('privacy-status');
+  if (strip) {
+    strip.checked = localStorage.getItem('trailapp.privacy.stripGpxTime') === '1';
+    strip.addEventListener('change', () => {
+      try { localStorage.setItem('trailapp.privacy.stripGpxTime', strip.checked ? '1' : '0'); } catch {}
+    });
+  }
+  if (wipe) wipe.addEventListener('click', () => {
+    if (!window.confirm('Delete ALL Trail App data on this device?\n\nThis permanently removes your plan, waypoints, recorded tracks, saved trails, gear list, and settings. Back up first if you want to keep them. This cannot be undone.')) return;
+    try {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('trailapp.') === 0) keys.push(k); }
+      keys.forEach(k => localStorage.removeItem(k));
+    } catch {}
+    if (status) status.textContent = 'All data deleted. Reloading…';
+    setTimeout(() => window.location.reload(), 600);
+  });
+})();
 </script>
 <!-- ================= Capacitor native bridge ================= -->
 <script>
@@ -2839,9 +2874,10 @@ window.__toolCluster = toolCluster;
     // ---- saved tracks: redraw + tap for stats/export/delete ----
     function trackGPX(t) {
       const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const stripTime = localStorage.getItem('trailapp.privacy.stripGpxTime') === '1';
       const segs = t.segments.map(s => '    <trkseg>\n' + s.map(p => {
         const ele = (p.ele != null) ? `\n        <ele>${(+p.ele).toFixed(1)}</ele>` : '';
-        const time = p.ts ? `\n        <time>${new Date(p.ts).toISOString()}</time>` : '';
+        const time = (!stripTime && p.ts) ? `\n        <time>${new Date(p.ts).toISOString()}</time>` : '';
         return `      <trkpt lat="${(+p.lat).toFixed(6)}" lon="${(+p.lon).toFixed(6)}">${ele}${time}\n      </trkpt>`;
       }).join('\n') + '\n    </trkseg>').join('\n');
       return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Trail App" xmlns="http://www.topografix.com/GPX/1/1">\n  <trk>\n    <name>${esc(t.name)}</name>\n${segs}\n  </trk>\n</gpx>\n`;
