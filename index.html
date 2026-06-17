@@ -563,7 +563,8 @@
         <li>The map, land, weather, and forecast layers fetch live data for the area you’re viewing or the point you tap — that reveals <em>what you look at</em> to those data providers, but not where you are.</li>
         <li>Backups and GPX files you export contain precise coordinates — only you choose when to share them.</li>
       </ul>
-      <label class="layer-row" style="margin-bottom:14px"><input type="checkbox" id="privacy-striptime"><span></span>Strip timestamps from exported track GPX (hides <em>when</em> you were there)</label>
+      <label class="layer-row" style="margin-bottom:10px"><input type="checkbox" id="privacy-striptime"><span></span>Strip timestamps from exported track GPX (hides <em>when</em> you were there)</label>
+      <label class="layer-row" style="margin-bottom:14px"><input type="checkbox" id="record-bg"><span></span>Keep recording with the screen off (background GPS — uses more battery; needs “Always” location, granted the first time you record)</label>
       <button id="privacy-wipe" style="padding:9px 14px;border:1px solid #c0392b;background:#fff;color:#c0392b;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Delete all my data on this device</button>
       <p id="privacy-status" style="margin:10px 0 0;font-size:12px;color:var(--accent);min-height:15px"></p>
     </div>
@@ -2291,6 +2292,13 @@ window.__toolCluster = toolCluster;
       try { localStorage.setItem('trailapp.privacy.stripGpxTime', strip.checked ? '1' : '0'); } catch {}
     });
   }
+  const bg = document.getElementById('record-bg');
+  if (bg) {
+    bg.checked = localStorage.getItem('trailapp.recordBackground') === '1';
+    bg.addEventListener('change', () => {
+      try { localStorage.setItem('trailapp.recordBackground', bg.checked ? '1' : '0'); } catch {}
+    });
+  }
   if (wipe) wipe.addEventListener('click', () => {
     if (!window.confirm('Delete ALL Trail App data on this device?\n\nThis permanently removes your plan, waypoints, recorded tracks, saved trails, gear list, and settings. Back up first if you want to keep them. This cannot be undone.')) return;
     try {
@@ -2844,8 +2852,37 @@ window.__toolCluster = toolCluster;
       };
     }
     const recordSampler = makeSampler(onFix);
-    async function startWatch() { recordSampler.start(); }
-    async function stopWatch() { recordSampler.stop(); }
+    let bgWatcherId = null;
+    const bgPlugin = () => (isNative && Cap.Plugins && Cap.Plugins.BackgroundGeolocation) ? Cap.Plugins.BackgroundGeolocation : null;
+    const bgOptIn = () => localStorage.getItem('trailapp.recordBackground') === '1';
+    async function startWatch() {
+      // True screen-off recording: when the user has opted in and the
+      // background-geolocation plugin is present, record under a foreground-
+      // service notification so the track continues with the screen off.
+      // Otherwise fall back to the battery-friendly foreground sampler.
+      const bg = bgOptIn() ? bgPlugin() : null;
+      if (bg) {
+        try {
+          bgWatcherId = await bg.addWatcher({
+            backgroundTitle: 'Trail App — recording',
+            backgroundMessage: 'Recording your track. Tap to return.',
+            requestPermissions: true, stale: false, distanceFilter: MIN_MOVE
+          }, (location, error) => {
+            if (error || !location) return;
+            onFix({ latitude: location.latitude, longitude: location.longitude, altitude: location.altitude, accuracy: location.accuracy });
+          });
+          return;
+        } catch (e) { bgWatcherId = null; /* fall back to sampler */ }
+      }
+      recordSampler.start();
+    }
+    async function stopWatch() {
+      if (bgWatcherId != null) {
+        try { await bgPlugin().removeWatcher({ id: bgWatcherId }); } catch {}
+        bgWatcherId = null;
+      }
+      recordSampler.stop();
+    }
 
     async function start() {
       recording = true; paused = false; startTs = Date.now();

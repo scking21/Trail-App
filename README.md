@@ -102,6 +102,19 @@ npm run config:native     # injects iOS location-usage string, verifies Android 
 
 - **Locate me** — the 📍 button on the map uses the native Geolocation plugin on
   device and the browser API in a normal browser.
+- **GPS track recording** — battery-conscious by default: instead of a continuous
+  high-accuracy watch, it polls one fix at a time on an adaptive interval (≈4 s
+  moving, backing off to 12 s when still) and stops GPS entirely while the app is
+  hidden. **Screen-off recording is opt-in** (Planner → Privacy & data → "Keep
+  recording with the screen off"): when enabled it uses
+  `@capacitor-community/background-geolocation`, which keeps a foreground-service
+  notification running so the track continues with the screen off. If the plugin
+  isn't present (e.g. a web build), the app silently falls back to the
+  foreground sampler. Background recording needs the extra permissions applied by
+  `npm run config:native` (iOS `NSLocationAlwaysAndWhenInUseUsageDescription` +
+  `UIBackgroundModes: [location]`; Android `ACCESS_BACKGROUND_LOCATION`), so run
+  `npm install && npx cap sync` after pulling this change to fetch and link the
+  plugin.
 - **Splash screen** — dark-green branded splash, auto-hidden on load.
 - **Status bar** — themed to match the app header (`#1f3a24`).
 - **Safe areas** — header, panels, and the trail detail sheet respect notches and
@@ -149,8 +162,11 @@ detail card.
 
 Run `npm run config:native` after adding platforms. It applies:
 
-- **iOS** (`Info.plist`): `NSLocationWhenInUseUsageDescription`, `NSCameraUsageDescription`.
-- **Android** (`AndroidManifest.xml`): `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`, `CAMERA`.
+- **iOS** (`Info.plist`): `NSLocationWhenInUseUsageDescription`, `NSCameraUsageDescription`,
+  `NSLocationAlwaysAndWhenInUseUsageDescription`, and `UIBackgroundModes: [location]`
+  (the last two enable opt-in screen-off recording).
+- **Android** (`AndroidManifest.xml`): `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`,
+  `ACCESS_BACKGROUND_LOCATION` (opt-in background recording), `CAMERA`.
 
 > ⚠️ `@capacitor/geolocation` ships an **empty** manifest — location permissions are
 > **NOT** auto-merged on Android. The script adds them explicitly; without them the

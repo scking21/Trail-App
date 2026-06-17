@@ -19,6 +19,14 @@ if [ -f "$PLIST" ]; then
   echo "  ✓ NSLocationWhenInUseUsageDescription set"
   set_str NSCameraUsageDescription "Show the trail marker over your live camera in AR view."
   echo "  ✓ NSCameraUsageDescription set"
+  # Background track recording (opt-in): "Always" usage string + the location
+  # background mode. Without these, screen-off recording can't run on iOS.
+  set_str NSLocationAlwaysAndWhenInUseUsageDescription "Trail App records your track in the background so the trail you walk is captured even with the screen off. Only used while you’re recording."
+  echo "  ✓ NSLocationAlwaysAndWhenInUseUsageDescription set"
+  "$PB" -c "Delete :UIBackgroundModes" "$PLIST" 2>/dev/null || true
+  "$PB" -c "Add :UIBackgroundModes array" "$PLIST"
+  "$PB" -c "Add :UIBackgroundModes:0 string location" "$PLIST"
+  echo "  ✓ UIBackgroundModes = [location]"
   # Export compliance: the app uses only standard HTTPS encryption, which is
   # exempt — declaring this skips the App Store Connect prompt on every upload.
   "$PB" -c "Add :ITSAppUsesNonExemptEncryption bool false" "$PLIST" 2>/dev/null \
@@ -41,6 +49,9 @@ if [ -f "$AMAN" ]; then
   }
   add_perm android.permission.ACCESS_FINE_LOCATION
   add_perm android.permission.ACCESS_COARSE_LOCATION
+  # Background track recording (opt-in). The background-geolocation plugin
+  # declares its own foreground-service entries; this grants the OS permission.
+  add_perm android.permission.ACCESS_BACKGROUND_LOCATION
   add_perm android.permission.CAMERA
   if ! grep -q 'android.hardware.camera' "$AMAN"; then
     perl -0pi -e 's{(<uses-permission android:name="android.permission.CAMERA" />)}{$1\n    <uses-feature android:name="android.hardware.camera" android:required="false" />}' "$AMAN"
