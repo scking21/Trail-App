@@ -38,6 +38,7 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <!-- GPS for the locate button, planner directions, and Trail Marker AR.
          @capacitor/geolocation ships an EMPTY manifest, so these are NOT auto-merged. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
