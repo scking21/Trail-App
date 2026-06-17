@@ -2330,12 +2330,13 @@ window.__toolCluster = toolCluster;
   async function locate() {
     try {
       let coords;
+      const GEO = { enableHighAccuracy: true, maximumAge: 15000, timeout: 10000 }; // reuse a recent fix
       if (isNative && Cap.Plugins && Cap.Plugins.Geolocation) {
-        const pos = await Cap.Plugins.Geolocation.getCurrentPosition({ enableHighAccuracy: true });
+        const pos = await Cap.Plugins.Geolocation.getCurrentPosition(GEO);
         coords = pos.coords;
       } else if (navigator.geolocation) {
         coords = await new Promise((res, rej) =>
-          navigator.geolocation.getCurrentPosition(p => res(p.coords), rej, { enableHighAccuracy: true }));
+          navigator.geolocation.getCurrentPosition(p => res(p.coords), rej, GEO));
       } else { return; }
       if (window.map && coords) {
         const ll = [coords.latitude, coords.longitude];
@@ -2616,11 +2617,12 @@ window.__toolCluster = toolCluster;
 
     async function getCoords() {
       try {
+        const GEO = { enableHighAccuracy: true, maximumAge: 8000, timeout: 10000 }; // reuse a recent fix
         if (isNative && Cap.Plugins && Cap.Plugins.Geolocation) {
-          const pos = await Cap.Plugins.Geolocation.getCurrentPosition({ enableHighAccuracy: true });
+          const pos = await Cap.Plugins.Geolocation.getCurrentPosition(GEO);
           return { lat: pos.coords.latitude, lon: pos.coords.longitude, note: '' };
         } else if (navigator.geolocation) {
-          const c = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(p => res(p.coords), rej, { enableHighAccuracy: true }));
+          const c = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(p => res(p.coords), rej, GEO));
           return { lat: c.latitude, lon: c.longitude, note: '' };
         }
       } catch (e) { /* fall through to map center */ }
@@ -2802,25 +2804,48 @@ window.__toolCluster = toolCluster;
       liveLine = L.polyline([], { color: '#c0392b', weight: 4, opacity: 0.9 }).addTo(window.map);
     }
 
-    async function startWatch() {
-      if (isNative && Cap.Plugins && Cap.Plugins.Geolocation) {
-        watchId = await Cap.Plugins.Geolocation.watchPosition(
-          { enableHighAccuracy: true }, (pos, err) => { if (pos && pos.coords) onFix(pos.coords); });
-      } else if (navigator.geolocation) {
-        watchId = navigator.geolocation.watchPosition(
-          p => onFix(p.coords), e => {}, { enableHighAccuracy: true, maximumAge: 0 });
-      }
-    }
-    async function stopWatch() {
-      try {
-        if (isNative && Cap.Plugins && Cap.Plugins.Geolocation && watchId != null) {
-          await Cap.Plugins.Geolocation.clearWatch({ id: watchId });
-        } else if (watchId != null && navigator.geolocation) {
-          navigator.geolocation.clearWatch(watchId);
+    // Battery: a continuous high-accuracy watch keeps the GPS radio powered the
+    // entire time. Instead, poll one fix at a time on an adaptive interval so the
+    // radio can idle between reads — back off when stationary, and stop entirely
+    // while the app/screen is hidden (we have no background-location permission,
+    // so a hidden watch only drains the battery).
+    function makeSampler(onFix) {
+      const FAST = 4000, SLOW = 12000, GEO = { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 };
+      let interval = FAST, timerId = null, running = false, busy = false, lastLL = null;
+      async function getFix() {
+        if (isNative && Cap.Plugins && Cap.Plugins.Geolocation) {
+          return (await Cap.Plugins.Geolocation.getCurrentPosition(GEO)).coords;
         }
-      } catch {}
-      watchId = null;
+        if (navigator.geolocation) {
+          return await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(p => res(p.coords), rej, GEO));
+        }
+        throw new Error('no geolocation');
+      }
+      function schedule() { clearTimeout(timerId); if (running) timerId = setTimeout(tick, interval); }
+      async function tick() {
+        if (!running || busy || document.hidden) return; // skip while a fix is pending or app hidden
+        busy = true;
+        try {
+          const c = await getFix();
+          if (lastLL) {
+            const moved = dist({ latitude: lastLL.lat, longitude: lastLL.lon }, { latitude: c.latitude, longitude: c.longitude });
+            interval = moved < MIN_MOVE ? Math.min(SLOW, interval + 2000) : FAST; // idle longer when not moving
+          }
+          lastLL = { lat: c.latitude, lon: c.longitude };
+          onFix(c);
+        } catch (e) { /* skip this tick */ }
+        busy = false;
+        schedule();
+      }
+      function onVis() { if (!document.hidden && running) { interval = FAST; tick(); } } // resume with an immediate fix
+      return {
+        start() { if (running) return; running = true; interval = FAST; lastLL = null; document.addEventListener('visibilitychange', onVis); tick(); },
+        stop() { running = false; clearTimeout(timerId); busy = false; document.removeEventListener('visibilitychange', onVis); }
+      };
     }
+    const recordSampler = makeSampler(onFix);
+    async function startWatch() { recordSampler.start(); }
+    async function stopWatch() { recordSampler.stop(); }
 
     async function start() {
       recording = true; paused = false; startTs = Date.now();
@@ -2864,7 +2889,8 @@ window.__toolCluster = toolCluster;
       if (!recording) return;
       paused = !paused;
       hq('tr-pause').textContent = paused ? 'Resume' : 'Pause';
-      if (!paused) beginSegment();   // new segment so the gap isn't drawn as a line
+      if (paused) { stopWatch(); }            // stop GPS while paused — no reason to drain
+      else { beginSegment(); startWatch(); }  // new segment so the gap isn't drawn as a line
     }
 
     btn.addEventListener('click', () => { if (!recording) start(); });
@@ -2934,7 +2960,7 @@ window.__toolCluster = toolCluster;
     const OFF_M = 60;       // metres off the line before alerting
     const BACK_M = 45;      // metres to be considered back on route (hysteresis)
     let followRoute = null; // flat [{lat,lon}, ...] of the track being followed
-    let followWatch = null, followNative = false, offRoute = false, followOwnWatch = false;
+    let offRoute = false, followOwnWatch = false;
 
     const banner = document.createElement('div');
     Object.assign(banner.style, {
@@ -2981,17 +3007,8 @@ window.__toolCluster = toolCluster;
         : `✓ On route — ${fmtDist(d)} away`;
     }
 
-    async function startFollowWatch() {
-      if (isNative && Cap.Plugins && Cap.Plugins.Geolocation) {
-        followNative = true;
-        followWatch = await Cap.Plugins.Geolocation.watchPosition(
-          { enableHighAccuracy: true }, (pos) => { if (pos && pos.coords) onFollowFix(pos.coords); });
-      } else if (navigator.geolocation) {
-        followNative = false;
-        followWatch = navigator.geolocation.watchPosition(
-          p => onFollowFix(p.coords), e => {}, { enableHighAccuracy: true, maximumAge: 0 });
-      }
-    }
+    const followSampler = makeSampler(onFollowFix); // adaptive, battery-friendly (see makeSampler)
+    async function startFollowWatch() { followSampler.start(); }
     async function startFollow(t) {
       await stopFollow();
       followRoute = t.segments.flat().map(p => ({ lat: p.lat, lon: p.lon }));
@@ -3009,16 +3026,8 @@ window.__toolCluster = toolCluster;
     async function stopFollow() {
       followRoute = null; offRoute = false;
       banner.style.display = 'none';
-      if (followOwnWatch) {
-        try {
-          if (followNative && Cap.Plugins && Cap.Plugins.Geolocation && followWatch != null) {
-            await Cap.Plugins.Geolocation.clearWatch({ id: followWatch });
-          } else if (followWatch != null && navigator.geolocation) {
-            navigator.geolocation.clearWatch(followWatch);
-          }
-        } catch {}
-      }
-      followWatch = null; followOwnWatch = false;
+      if (followOwnWatch) followSampler.stop();
+      followOwnWatch = false;
     }
 
     window.Tracks = {
