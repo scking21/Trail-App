@@ -1,9 +1,18 @@
-# Trail App — Mobile (iOS & Android)
+# Blackrow Trails — Mobile (iOS & Android)
 
-Native iOS and Android wrapper around the Trail App web experience (Map / Trails /
+Native iOS and Android wrapper around the Blackrow Trails web experience (Map /
 Planner), built with [Capacitor](https://capacitorjs.com). The entire UI is the
 existing single-file web app — Capacitor packages it into real App Store / Play
 Store binaries and gives it native GPS, splash screen, and status-bar control.
+
+### Finding trails
+
+A **search box on the map** (top-left) finds trails by name: it matches the
+built-in featured guides instantly and also queries the **live USGS National Map
+trail network** nationwide (debounced, 3+ characters). Picking a result flies the
+map to the trail and opens its detail card. Jumping to a region or any of the 50
+states is the header **region dropdown** (top-right) — the old standalone
+“Trails” tab was a duplicate of that dropdown and has been removed.
 
 ## Project layout
 
@@ -132,6 +141,90 @@ npm run config:native     # injects iOS location-usage string, verifies Android 
 > localhost dev server (a host:port origin), so edits show on a normal reload — no
 > manual cache-clearing. In the packaged native app it's cache-first for true
 > offline launch. No version bumping needed during development.
+
+## Monetization: Free / 14-day Trial / Trail Pro
+
+The app ships a three-tier model, all enforced client-side through a single
+`Entitlement` module (state in `localStorage`) plus a reusable paywall modal:
+
+- **Free** — Trail Discovery (browse/search trails, read descriptions) and basic
+  **real-time** track recording **while connected to data**. Recording offline,
+  and downloading maps, are blocked.
+- **14-day Trial** — full Trail Pro access; auto-expires back to Free after 14
+  days. The trial can only be started once per device.
+- **Trail Pro (paid)** — everything below.
+
+**Pro-gated features** (each opens the paywall for Free users):
+
+| Feature | Trigger that fires the paywall |
+| --- | --- |
+| Custom Route Planner | **Create New Plan** / **Edit Route** (Planner tab) |
+| Offline Map Downloads | the ⬇ download-area button on the map |
+| Advanced Overlays (land borders, slope shading, weather) | the Land / Cadastral / Slope / Radar toggles |
+| Safety / wrong-turn alerts | the “▶ Follow (off-route alerts)” buttons |
+| Offline track recording | tapping record while `navigator.onLine` is false |
+
+Helpers: `requirePro(feature, action)` runs `action` if entitled else paywalls
+(and runs it on unlock); `showPaywall(feature)` opens it directly.
+
+### Real store subscriptions (`billing.js`)
+
+`billing.js` is a defensive wrapper around the **RevenueCat Capacitor plugin**
+(`@revenuecat/purchases-capacitor`), which fronts both **Apple StoreKit** and
+**Google Play Billing** and handles receipt validation, intro/trial offers, and
+cross-platform entitlement state. On the web (or any build without the plugin)
+`Billing.isAvailable()` is `false` and the app falls back to the simulated
+Entitlement flow, so dev never breaks. When live, the paywall’s Subscribe /
+Trial / Restore buttons route through the store and `Billing` syncs the result
+back into `Entitlement` via `setFromStore()`.
+
+To go live (full checklist in the header comment of `billing.js`):
+
+1. `npm i @revenuecat/purchases-capacitor && npx cap sync`
+2. Create subscription products `trailpro_monthly` / `trailpro_yearly` in
+   **App Store Connect** and **Play Console**, each with a 14-day free-trial /
+   introductory offer.
+3. In **RevenueCat**: add both apps, create an entitlement `pro` with both
+   products attached, and an Offering `default` with monthly + annual packages.
+4. Paste your public SDK keys into `REVENUECAT_API_KEYS` in `billing.js`.
+
+Apple/Google both require a visible **Restore purchases** path — it’s in the
+paywall modal.
+
+## Share trip plan (Pro)
+
+Pro users can hand their itinerary to someone else through the **native OS share
+sheet** — iOS `UIActivityViewController`, Android `ACTION_SEND` — so it goes to
+Messages, Mail, WhatsApp, AirDrop, etc. The Planner has a **Trip start date**
+picker and a **📤 Share trip plan** button; sharing builds a plain-text,
+day-by-day itinerary (each day’s calendar date, every stop with distance/gain and
+a Google Maps pin link, and trip totals) and opens the share sheet.
+
+Wired via [`@capacitor/share`](https://capacitorjs.com/docs/apis/share) in
+`share.js`, with a graceful fallback chain: **Capacitor Share** (packaged app) →
+**Web Share API** (`navigator.share`, mobile browsers) → **clipboard copy**. So
+it works in the native apps and degrades cleanly on the web. The button is gated
+behind `requirePro` like every other paid feature. Native builds need the plugin
+linked — already done via `npm i @capacitor/share && npx cap sync`.
+
+## Trip Planner: multi-day itineraries
+
+The Planner tab builds a **day-by-day** itinerary. Add as many days as you want
+(“＋ Add another day”), rename each day inline, set one **active** day (new stops
+land there), and move stops between days. Each day shows its own
+distance/gain/time totals; the top totals box sums the whole trip. Trails added
+from the map and custom routes both become day stops. Persisted in
+`trailapp.plan.v1` (items, each tagged with `day`) + `trailapp.plandays.v1`
+(day count, names, active day).
+
+## Custom Route Planner (Pro)
+
+Draw your own routes on the map: **Create New Plan** starts a drawing session
+(toolbar at the top of the map) — tap to drop points, **Undo**, toggle **Snap to
+trails** (pulls each point onto the nearest loaded USGS trail line within ~45 m),
+then **Save**. **Edit Route** reopens a saved route to redraw it. Routes show
+live distance + point count, can be added to any plan day, and are stored in
+`trailapp.routes.v1`. Snapping needs the Trails layer loaded (zoom ≥ 11).
 
 ## Trail Marker AR (sensor overlay)
 

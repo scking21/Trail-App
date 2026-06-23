@@ -6,8 +6,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#1f3a24">
-<title>Trail App</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<title>Blackrow Trails</title>
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <style>
   :root {
     --panel-bg: #ffffff;
@@ -117,6 +117,8 @@
   #land-status.loading, #cad-status.loading, #trail-status.loading, #poi-status.loading, #camp-status.loading, #offroad-status.loading { color: #b8860b; }
   #land-status.error, #cad-status.error, #trail-status.error, #poi-status.error, #camp-status.error, #offroad-status.error { color: var(--hard); }
   .leg-line { display: inline-block; width: 20px; height: 0; vertical-align: middle; flex-shrink: 0; }
+  .name-popup .leaflet-popup-content { margin: 8px 12px; font-size: 13px; line-height: 1.35; }
+  .name-popup .leaflet-popup-content small { color: var(--muted); }
 
   /* Trails tab — 50-state directory */
   #tab-trails { display: none; overflow-y: auto; flex-direction: column; padding: 22px 26px; }
@@ -369,15 +371,111 @@
       max-height: 72vh; overflow-y: auto;
     }
   }
+
+  /* ===== Membership / paywall ===== */
+  .plan-badge { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700;
+    padding:3px 9px; border-radius:999px; letter-spacing:.02em; vertical-align:middle; }
+  .plan-badge.free  { background:#e7eae3; color:#4a5247; }
+  .plan-badge.trial { background:#fde9c8; color:#8a5a12; }
+  .plan-badge.paid  { background:#1f3a24; color:#bfe6c6; }
+  .lock-pill { font-size:11px; font-weight:700; color:#8a5a12; background:#fde9c8;
+    border-radius:999px; padding:1px 7px; margin-left:6px; }
+  .membership-card { border:1px solid var(--line,#dfe3da); border-radius:12px; padding:16px 18px;
+    margin:0 0 20px; background:#fafbf8; }
+  .membership-card h2 { margin:0 0 6px; font-size:18px; display:flex; align-items:center; gap:10px; }
+  .membership-card .mc-sub { color:var(--muted); font-size:13px; margin:0 0 12px; line-height:1.5; }
+  .membership-card .mc-actions { display:flex; flex-wrap:wrap; gap:10px; }
+  .btn-paid { padding:10px 16px; border:none; border-radius:9px; font-size:14px; font-weight:700;
+    cursor:pointer; background:#2e6b34; color:#fff; }
+  .btn-paid.secondary { background:#fff; color:#2e6b34; border:1.5px solid #2e6b34; }
+  .btn-paid:disabled { opacity:.5; cursor:default; }
+  .feature-list { list-style:none; margin:10px 0 0; padding:0; }
+  .feature-list li { display:flex; gap:9px; align-items:flex-start; font-size:13.5px;
+    padding:5px 0; color:#2b3329; line-height:1.45; }
+  .feature-list li .fi { flex:0 0 auto; width:18px; text-align:center; }
+
+  /* Paywall modal */
+  #paywall { position:fixed; inset:0; z-index:5000; display:none; align-items:center;
+    justify-content:center; background:rgba(20,28,20,.55); padding:18px;
+    padding-bottom:calc(18px + env(safe-area-inset-bottom)); }
+  #paywall.open { display:flex; }
+  .pw-card { background:#fff; border-radius:16px; max-width:430px; width:100%;
+    max-height:88vh; overflow-y:auto; box-shadow:0 18px 50px rgba(0,0,0,.35);
+    padding:24px 24px 20px; }
+  .pw-card h2 { margin:0 0 4px; font-size:21px; color:#1f3a24; }
+  .pw-card .pw-feat { color:var(--muted); font-size:13.5px; margin:0 0 4px; }
+  .pw-card .pw-hi { font-weight:700; color:#2e6b34; }
+  .pw-price { font-size:13px; color:var(--muted); margin:14px 0 4px; }
+  .pw-actions { display:flex; flex-direction:column; gap:10px; margin-top:16px; }
+  .pw-actions .btn-paid { width:100%; }
+  .pw-dismiss { background:none; border:none; color:var(--muted); font-size:13px;
+    cursor:pointer; margin-top:6px; width:100%; padding:6px; }
+  .pw-note { font-size:11.5px; color:var(--muted); text-align:center; margin:10px 0 0; line-height:1.4; }
+  .pw-legal { font-size:11.5px; text-align:center; margin:8px 0 0; }
+  .pw-legal a { color:var(--accent); text-decoration:underline; }
+
+  /* ===== Multi-day planner ===== */
+  .day-card { border:1px solid var(--line,#dfe3da); border-radius:12px; margin:0 0 14px; background:#fff; overflow:hidden; }
+  .day-card.active { border-color:#2e6b34; box-shadow:0 0 0 1px #2e6b34 inset; }
+  .day-head { display:flex; align-items:center; gap:10px; padding:11px 14px; background:#f3f6f1; cursor:pointer; }
+  .day-card.active .day-head { background:#e6f0e6; }
+  .day-head .day-title { font-weight:700; font-size:15px; flex:1; border:none; background:transparent; color:#22301f; padding:2px 4px; border-radius:6px; }
+  .day-head .day-title:focus { background:#fff; outline:1.5px solid #2e6b34; }
+  .day-head .day-active-tag { font-size:10px; font-weight:700; color:#2e6b34; background:#cfe6cf; border-radius:999px; padding:2px 7px; }
+  .day-head .day-del { border:none; background:none; color:var(--muted); font-size:16px; cursor:pointer; line-height:1; padding:4px; }
+  .day-head .day-del:hover { color:#c0392b; }
+  .day-totals { display:flex; gap:14px; padding:6px 14px 0; font-size:11.5px; color:var(--muted); }
+  .day-totals b { color:#2b3329; }
+  .day-body { padding:8px 14px 12px; }
+  .day-empty { font-size:12.5px; color:var(--muted); padding:8px 2px; }
+  .trip-meta-row { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin:0 0 14px; }
+  .trip-meta-row label { font-size:13px; color:var(--muted); font-weight:600; }
+  .trip-meta-row input[type=date] { padding:8px 10px; border:1px solid var(--line,#dfe3da); border-radius:8px; font-size:14px; background:#fff; }
+  .trip-meta-row #plan-share { margin-left:auto; padding:9px 14px; }
+  .pi-route .pi-bar { background:#1f6feb !important; }
+  .pi-move { border:none; background:#eef1ec; color:#3a463a; font-size:11px; border-radius:6px; padding:3px 6px; cursor:pointer; }
+
+  /* ===== Route drawing toolbar (on the map) ===== */
+  #route-toolbar { position:absolute; left:50%; transform:translateX(-50%);
+    top:calc(12px + env(safe-area-inset-top)); z-index:1200; display:none;
+    background:#1f3a24; color:#fff; border-radius:12px; padding:10px 12px;
+    box-shadow:0 6px 22px rgba(0,0,0,.35); max-width:calc(100vw - 24px); }
+  #route-toolbar.open { display:block; }
+  #route-toolbar .rt-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  #route-toolbar .rt-stat { font-size:12px; opacity:.9; margin-right:4px; }
+  #route-toolbar button { border:none; border-radius:8px; padding:7px 11px; font-size:13px; font-weight:600; cursor:pointer; }
+  #route-toolbar .rt-finish { background:#2e6b34; color:#fff; }
+  #route-toolbar .rt-undo, #route-toolbar .rt-cancel { background:#3a5640; color:#dfeede; }
+  #route-toolbar .rt-snap { display:flex; align-items:center; gap:5px; font-size:12px; cursor:pointer; }
+  #route-toolbar .rt-hint { font-size:11px; opacity:.8; margin-top:6px; }
+
+  /* ===== Trail name search (on the map) ===== */
+  #trail-search { position:absolute; z-index:1100; left:12px;
+    top:calc(12px + env(safe-area-inset-top)); width:min(330px, calc(100vw - 90px)); }
+  #trail-search .ts-box { display:flex; align-items:center; background:#fff; border-radius:10px;
+    box-shadow:0 2px 10px rgba(0,0,0,.22); border:1px solid #cfcabd; overflow:hidden; }
+  #trail-search .ts-box span.ts-ico { padding:0 4px 0 10px; font-size:14px; color:#5a6157; }
+  #trail-search input { flex:1; border:none; outline:none; padding:11px 8px; font-size:14px; background:transparent; }
+  #trail-search .ts-clear { border:none; background:none; font-size:16px; color:#8a8a82; cursor:pointer; padding:0 10px; display:none; }
+  #ts-results { margin-top:6px; background:#fff; border-radius:10px; box-shadow:0 6px 22px rgba(0,0,0,.25);
+    max-height:min(56vh, 420px); overflow-y:auto; display:none; }
+  #ts-results.open { display:block; }
+  .ts-group { font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+    color:#7a8174; padding:8px 12px 4px; }
+  .ts-item { display:flex; gap:8px; align-items:flex-start; padding:9px 12px; cursor:pointer; border-top:1px solid #f0efe9; }
+  .ts-item:hover { background:#f4f7f2; }
+  .ts-item .ts-bar { flex:0 0 auto; width:4px; align-self:stretch; border-radius:2px; background:#1f6feb; }
+  .ts-item .ts-name { font-size:13.5px; font-weight:600; color:#22301f; }
+  .ts-item .ts-meta { font-size:11.5px; color:var(--muted); margin-top:1px; }
+  .ts-empty, .ts-status { padding:11px 12px; font-size:12.5px; color:var(--muted); }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>🥾 Trail App</h1>
+  <h1>🥾 Blackrow Trails</h1>
   <nav>
     <button class="active" data-tab="map">Map</button>
-    <button data-tab="trails">Trails</button>
     <button data-tab="planner">Planner</button>
   </nav>
   <select id="region-select" title="Jump to region"></select>
@@ -385,6 +483,25 @@
 
 <div class="tab active" id="tab-map">
   <div id="map"></div>
+  <div id="route-toolbar">
+    <div class="rt-row">
+      <span class="rt-stat" id="rt-title">New route</span>
+      <span class="rt-stat" id="rt-dist">0.0 mi · 0 pts</span>
+      <label class="rt-snap"><input type="checkbox" id="rt-snap-cb" checked> Snap to trails</label>
+      <button class="rt-undo" id="rt-undo">↶ Undo</button>
+      <button class="rt-finish" id="rt-finish">✓ Save</button>
+      <button class="rt-cancel" id="rt-cancel">✕</button>
+    </div>
+    <div class="rt-hint">Tap the map to drop points. Snap pulls each point onto a nearby trail line (load the Trails layer & zoom in).</div>
+  </div>
+  <div id="trail-search">
+    <div class="ts-box">
+      <span class="ts-ico">🔍</span>
+      <input id="ts-input" type="search" placeholder="Search trails by name…" autocomplete="off" aria-label="Search trails by name">
+      <button class="ts-clear" id="ts-clear" title="Clear" aria-label="Clear search">✕</button>
+    </div>
+    <div id="ts-results"></div>
+  </div>
   <aside>
     <section id="mode-presets">
       <h2>Map Mode <span style="font-weight:400;color:var(--muted);font-size:11px">· one-tap layers</span></h2>
@@ -485,21 +602,29 @@
   </aside>
 </div>
 
-<div class="tab" id="tab-trails">
-  <div class="trails-intro">
-    <h2>Browse trails by state</h2>
-    <p>All 50 states. Pick a state to jump the map to its flagship hiking region — live USGS trail lines, PAD-US public &amp; private land, and NCED conservation easements load automatically for wherever you pan.</p>
-  </div>
-  <input id="state-search" type="search" placeholder="Filter states…" autocomplete="off">
-  <div class="state-grid" id="state-grid"></div>
-</div>
 <div class="tab" id="tab-planner">
   <div class="planner-wrap">
+
+    <div class="membership-card" id="membership-card">
+      <h2>Membership <span class="plan-badge free" id="plan-badge">Free</span></h2>
+      <p class="mc-sub" id="plan-status">You're on the free plan — Trail Discovery and basic real-time tracking.</p>
+      <div class="mc-actions" id="plan-actions"></div>
+    </div>
+
+    <div class="membership-card" id="route-planner-card">
+      <h2>🗺️ Custom Route Planner <span class="lock-pill" id="planner-lock">PAID</span></h2>
+      <p class="mc-sub">Draw, edit, and snap your own routes to the digital trail network — your custom hikes, your way.</p>
+      <div class="mc-actions">
+        <button class="btn-paid" id="route-new">＋ Create New Plan</button>
+        <button class="btn-paid secondary" id="route-edit">✎ Edit Route</button>
+      </div>
+    </div>
+
     <div class="planner-head">
       <h2>Trip Plan</h2>
       <button id="plan-clear" title="Remove all trails">Clear all</button>
     </div>
-    <p class="planner-sub">Trails you’ve added build an itinerary with running totals. Click any trailhead on the map and choose <strong>Add to Plan</strong>.</p>
+    <p class="planner-sub">Plan your trip day by day. Add as many days as you like, then click any trailhead on the map (or a custom route) and choose <strong>Add to Plan</strong> — it lands on your active day.</p>
     <div class="planner-head" style="margin:0 0 12px">
       <span id="plan-saved" style="font-size:12px;color:var(--accent)">✓ Auto-saved on this device</span>
       <div style="display:flex;gap:14px;align-items:center">
@@ -515,7 +640,13 @@
       <div class="pt"><div class="pt-val" id="pt-time">0.0 h</div><div class="pt-lab">Est. Time</div></div>
     </div>
     <a class="directions-btn" id="plan-directions" target="_blank" rel="noopener" style="display:none;margin-bottom:16px">🧭 Directions to all trailheads</a>
-    <div class="plan-list" id="plan-list"></div>
+    <div class="trip-meta-row">
+      <label for="trip-start">Trip start date</label>
+      <input id="trip-start" type="date">
+      <button id="plan-share" class="btn-paid" title="Share your day-by-day itinerary">📤 Share trip plan</button>
+    </div>
+    <div id="plan-days"></div>
+    <button id="plan-add-day" class="btn-paid secondary" style="margin-top:6px">＋ Add another day</button>
 
     <div class="wp-section">
       <div class="planner-head" style="margin-top:24px">
@@ -571,9 +702,11 @@
   </div>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="vendor/leaflet/leaflet.js"></script>
 <script src="geo.js"></script>
 <script src="ar.js"></script>
+<script src="billing.js"></script>
+<script src="share.js"></script>
 <script>
 // ---------- Tabs ----------
 document.querySelectorAll('nav button').forEach(btn => {
@@ -615,6 +748,11 @@ document.body.insertAdjacentHTML('beforeend', svgDefs);
 // Drop geometry precision as we zoom out so payloads stay small.
 function offsetForZoom(z) { return z >= 13 ? 0 : z >= 11 ? 0.0008 : z >= 10 ? 0.002 : 0.005; }
 function viewEnvelope() { const b = map.getBounds(); return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].join(','); }
+
+// Quick name label at the click point (for trails, trailheads, trail ends).
+function namePopup(latlng, html) {
+  if (html) L.popup({ closeButton: true, autoPan: false, className: 'name-popup' }).setLatLng(latlng).setContent(html).openOn(map);
+}
 
 // One Esri FeatureServer query -> GeoJSON. `url` is the layer base (no /query).
 async function fetchGeoJSON(url, where, outFields, env, offset, cap) {
@@ -873,8 +1011,10 @@ function buildTrailEndpoints(feats) {
     termini.forEach((pt, i) => {
       if (budget-- <= 0) return;
       const kind = i === 0 ? 'head' : 'end';
+      const epLabel = `${name} — ${kind === 'head' ? 'Trailhead' : 'Terminus'}`;
       L.marker([pt[1], pt[0]], { icon: endpointIcon(kind), interactive: true, keyboard: false })
-        .bindTooltip(`${name} — ${kind === 'head' ? 'Trailhead' : 'Terminus'}`, { direction: 'top' })
+        .bindTooltip(epLabel, { direction: 'top' })
+        .on('click', e => namePopup(e.latlng, `<strong>${name}</strong><br><small>${kind === 'head' ? 'Trailhead' : 'Trail end'}</small>`))
         .addTo(trailEndpointLayer);
     });
   }
@@ -900,6 +1040,12 @@ const trailGroup = makeGroup('trail-status', [usgsTrailSpec, runTrailSpec, mtbTr
 // ---- POINTS OF INTEREST group: USGS National Map structures (national point data) ----
 const STRUCT_URL = 'https://carto.nationalmap.gov/arcgis/rest/services/structures/MapServer';
 const POI_FIELDS = 'NAME,ADDRESS,CITY,STATE';
+function poiLabel(a, kind) {
+  const nm = (a.NAME && a.NAME.trim()) ? a.NAME.trim() : kind;
+  const place = [a.CITY, a.STATE].filter(Boolean).join(', ');
+  const sub = nm.toLowerCase().includes(kind.toLowerCase()) ? place : [kind, place].filter(Boolean).join(' · ');
+  return `<strong>${nm}</strong>` + (sub ? `<br><small>${sub}</small>` : '');
+}
 function poiSpec(toggle, kind, layerId, color) {
   return makeOverlay({
     toggle, minZoom: 12, cap: 1000, zoomNote: 'zoom in to load',
@@ -907,12 +1053,8 @@ function poiSpec(toggle, kind, layerId, color) {
     pointToLayer: (f, latlng) => L.circleMarker(latlng, {
       radius: 5, color: '#fff', weight: 1.5, fillColor: color, fillOpacity: 0.95
     }),
-    tooltip: a => {
-      const nm = (a.NAME && a.NAME.trim()) ? a.NAME.trim() : kind;
-      const place = [a.CITY, a.STATE].filter(Boolean).join(', ');
-      const sub = nm.toLowerCase().includes(kind.toLowerCase()) ? place : [kind, place].filter(Boolean).join(' · ');
-      return `<strong>${nm}</strong>` + (sub ? `<br><small>${sub}</small>` : '');
-    }
+    onClick: (a, latlng) => namePopup(latlng, poiLabel(a, kind)),
+    tooltip: a => poiLabel(a, kind)
   });
 }
 const poiSpecs = [
@@ -1296,6 +1438,7 @@ function showUsgsTrail(props, latlng) {
   updateArBtn();
   renderAccessAndEmergency(null);
   detail.classList.add('open');
+  namePopup(latlng, `<strong>${name}</strong>`); // name label right at the click point
 }
 function showOffroad(props, latlng) {
   currentTrail = null;
@@ -1320,41 +1463,90 @@ function showOffroad(props, latlng) {
 
 document.getElementById('detail-close').addEventListener('click', () => detail.classList.remove('open'));
 
-// ---------- Trip Planner ----------
-// A plan is a list of curated trail objects, persisted on this device. Totals are
-// derived by parsing the human stat strings ("2.4 mi", "2,800 ft", "1.3 h").
+// ---------- Trip Planner (multi-day) ----------
+// A plan is a flat list of items (curated trails or custom routes), each tagged
+// with a `day` number, persisted on this device. Days let the user lay out a
+// multi-day trip — one itinerary per day, add as many days as they want.
+// Totals are derived by parsing the human stat strings ("2.4 mi", "2,800 ft", "1.3 h").
 const PLAN_KEY = 'trailapp.plan.v1';
+const DAYS_KEY = 'trailapp.plandays.v1';
 let plan = [];
 try { plan = JSON.parse(localStorage.getItem(PLAN_KEY)) || []; } catch { plan = []; }
 
-const trailKey = t => `${t.name}@${t.lat},${t.lon}`;
+// Day metadata: how many days exist, their names, and which one new adds land on.
+let dayMeta = { count: 1, active: 1, names: {} };
+try { Object.assign(dayMeta, JSON.parse(localStorage.getItem(DAYS_KEY)) || {}); } catch {}
+// Back-compat / repair: ensure count covers every item's day, default day=1.
+plan.forEach(p => { if (!p.day) p.day = 1; });
+dayMeta.count = Math.max(1, dayMeta.count || 1, ...plan.map(p => p.day || 1));
+if (!dayMeta.active || dayMeta.active > dayMeta.count) dayMeta.active = dayMeta.count;
+
+const trailKey = t => t.kind === 'route' ? `route:${t.routeId}` : `${t.name}@${t.lat},${t.lon}`;
 const num = s => parseFloat(String(s || '').replace(/,/g, '')) || 0;
 const inPlan = t => plan.some(p => trailKey(p) === trailKey(t));
+const dayName = d => dayMeta.names[d] || `Day ${d}`;
 
-function savePlan() { try { localStorage.setItem(PLAN_KEY, JSON.stringify(plan)); } catch {} }
+function savePlan() {
+  try { localStorage.setItem(PLAN_KEY, JSON.stringify(plan)); } catch {}
+  try { localStorage.setItem(DAYS_KEY, JSON.stringify(dayMeta)); } catch {}
+}
 
 function syncAddBtn() {
   if (!currentTrail) return;
   const added = inPlan(currentTrail);
   addPlanBtn.classList.toggle('added', added);
-  addPlanBtn.textContent = added ? '✓ In Plan — remove' : '＋ Add to Plan';
+  addPlanBtn.textContent = added ? '✓ In Plan — remove' : `＋ Add to ${dayName(dayMeta.active)}`;
 }
 
 function togglePlan(t) {
   const k = trailKey(t);
   if (inPlan(t)) plan = plan.filter(p => trailKey(p) !== k);
-  else plan.push(t);
+  else plan.push(Object.assign({ day: dayMeta.active }, t));
   savePlan();
   syncAddBtn();
   renderPlanner();
 }
 addPlanBtn.addEventListener('click', () => { if (currentTrail) togglePlan(currentTrail); });
 
+// ---- Day operations ----
+function addDay() {
+  dayMeta.count++;
+  dayMeta.active = dayMeta.count;
+  savePlan(); syncAddBtn(); renderPlanner();
+}
+function removeDay(d) {
+  if (dayMeta.count <= 1) { plan = []; }                  // clearing the only day
+  else {
+    plan = plan.filter(p => p.day !== d);                 // drop that day's items
+    plan.forEach(p => { if (p.day > d) p.day--; });       // shift later days down
+    dayMeta.count--;
+    const names = {};
+    Object.keys(dayMeta.names).forEach(k => {
+      const n = +k; if (n < d) names[n] = dayMeta.names[k]; else if (n > d) names[n - 1] = dayMeta.names[k];
+    });
+    dayMeta.names = names;
+  }
+  if (dayMeta.active > dayMeta.count) dayMeta.active = dayMeta.count;
+  savePlan(); syncAddBtn(); renderPlanner();
+}
+function setActiveDay(d) { dayMeta.active = d; savePlan(); syncAddBtn(); renderPlanner(); }
+function moveItem(t, d) {
+  const it = plan.find(p => trailKey(p) === trailKey(t));
+  if (it) { it.day = d; savePlan(); renderPlanner(); }
+}
+
+function openPlanItem(t) {
+  document.querySelector('nav button[data-tab="map"]').click();
+  if (t.kind === 'route' && window.RoutePlanner) { window.RoutePlanner.show(t.routeId); return; }
+  if (t.lat != null) { map.setView([t.lat, t.lon], 14); showTrail(t); }
+}
+
 function renderPlanner() {
-  const list = document.getElementById('plan-list');
+  const wrap = document.getElementById('plan-days');
   document.querySelector('nav button[data-tab="planner"]').textContent =
     plan.length ? `Planner (${plan.length})` : 'Planner';
 
+  // Overall totals across every day.
   const dist = plan.reduce((n, t) => n + num(t.length), 0);
   const gain = plan.reduce((n, t) => n + num(t.gain), 0);
   const time = plan.reduce((n, t) => n + num(t.time), 0);
@@ -1363,44 +1555,308 @@ function renderPlanner() {
   document.getElementById('pt-gain').textContent = `${gain.toLocaleString()} ft`;
   document.getElementById('pt-time').textContent = `${time.toFixed(1)} h`;
 
-  // Multi-stop directions across every trailhead (Google Maps handles N waypoints).
+  // Multi-stop directions across every located item (Google Maps handles N waypoints).
   const dirBtn = document.getElementById('plan-directions');
-  if (plan.length) {
-    dirBtn.href = 'https://www.google.com/maps/dir/' + plan.map(t => `${t.lat},${t.lon}`).join('/');
+  const pts = plan.filter(t => t.lat != null);
+  if (pts.length) {
+    dirBtn.href = 'https://www.google.com/maps/dir/' + pts.map(t => `${t.lat},${t.lon}`).join('/');
     dirBtn.style.display = '';
-  } else {
-    dirBtn.style.display = 'none';
-  }
+  } else dirBtn.style.display = 'none';
 
   renderTripKit(); // gear / hazards / rig reflect the plan (or map view when empty)
 
-  if (!plan.length) {
-    list.innerHTML = '<div class="plan-empty">No trails yet — click a trailhead marker on the map and choose “Add to Plan”.</div>';
-    return;
-  }
-  list.innerHTML = '';
-  plan.forEach(t => {
-    const row = document.createElement('div');
-    row.className = 'plan-item';
-    row.innerHTML =
-      `<span class="pi-bar" style="background:${diffColors[t.diff] || '#999'}"></span>` +
-      `<div class="pi-main"><div class="pi-name">${t.name}</div>` +
-      `<div class="pi-meta">${[t.length, t.gain, t.time, t.land].filter(Boolean).join(' · ')}</div></div>` +
-      `<button class="pi-remove" title="Remove">✕</button>`;
-    row.querySelector('.pi-name').addEventListener('click', () => {
-      document.querySelector('nav button[data-tab="map"]').click();
-      map.setView([t.lat, t.lon], 14);
-      showTrail(t);
+  wrap.innerHTML = '';
+  for (let d = 1; d <= dayMeta.count; d++) {
+    const items = plan.filter(p => p.day === d);
+    const dDist = items.reduce((n, t) => n + num(t.length), 0);
+    const dGain = items.reduce((n, t) => n + num(t.gain), 0);
+    const dTime = items.reduce((n, t) => n + num(t.time), 0);
+    const card = document.createElement('div');
+    card.className = 'day-card' + (d === dayMeta.active ? ' active' : '');
+    card.innerHTML =
+      `<div class="day-head">` +
+        `<input class="day-title" value="${dayName(d).replace(/"/g, '&quot;')}" aria-label="Day name">` +
+        (d === dayMeta.active ? `<span class="day-active-tag">active</span>` : '') +
+        `<button class="day-del" title="Remove this day">🗑</button>` +
+      `</div>` +
+      `<div class="day-totals"><span><b>${items.length}</b> stop${items.length === 1 ? '' : 's'}</span>` +
+        `<span><b>${dDist.toFixed(1)}</b> mi</span><span><b>${dGain.toLocaleString()}</b> ft</span>` +
+        `<span><b>${dTime.toFixed(1)}</b> h</span></div>` +
+      `<div class="day-body"></div>`;
+    const body = card.querySelector('.day-body');
+    if (!items.length) {
+      body.innerHTML = `<div class="day-empty">No stops yet — set this day active, then add a trail or custom route from the map.</div>`;
+    } else {
+      items.forEach(t => {
+        const row = document.createElement('div');
+        row.className = 'plan-item' + (t.kind === 'route' ? ' pi-route' : '');
+        const moveOpts = [];
+        for (let n = 1; n <= dayMeta.count; n++) if (n !== d) moveOpts.push(`<option value="${n}">→ ${dayName(n)}</option>`);
+        row.innerHTML =
+          `<span class="pi-bar" style="background:${diffColors[t.diff] || '#1f6feb'}"></span>` +
+          `<div class="pi-main"><div class="pi-name">${(t.kind === 'route' ? '🗺️ ' : '') + t.name}</div>` +
+          `<div class="pi-meta">${[t.length, t.gain, t.time, t.land].filter(Boolean).join(' · ')}</div></div>` +
+          (moveOpts.length ? `<select class="pi-move" title="Move to another day"><option value="">Move…</option>${moveOpts.join('')}</select>` : '') +
+          `<button class="pi-remove" title="Remove">✕</button>`;
+        row.querySelector('.pi-name').addEventListener('click', () => openPlanItem(t));
+        row.querySelector('.pi-remove').addEventListener('click', () => togglePlan(t));
+        const mv = row.querySelector('.pi-move');
+        if (mv) mv.addEventListener('change', () => { if (mv.value) moveItem(t, +mv.value); });
+        body.appendChild(row);
+      });
+    }
+    // Wire day-level controls.
+    card.querySelector('.day-head').addEventListener('click', e => {
+      if (e.target.closest('.day-title') || e.target.closest('.day-del')) return;
+      setActiveDay(d);
     });
-    row.querySelector('.pi-remove').addEventListener('click', () => togglePlan(t));
-    list.appendChild(row);
-  });
+    const title = card.querySelector('.day-title');
+    title.addEventListener('change', () => {
+      const v = title.value.trim();
+      if (v && v !== `Day ${d}`) dayMeta.names[d] = v; else delete dayMeta.names[d];
+      savePlan(); syncAddBtn();
+    });
+    card.querySelector('.day-del').addEventListener('click', () => {
+      if (items.length && !window.confirm(`Remove ${dayName(d)} and its ${items.length} stop(s)?`)) return;
+      removeDay(d);
+    });
+    wrap.appendChild(card);
+  }
 }
 
+document.getElementById('plan-add-day').addEventListener('click', addDay);
 document.getElementById('plan-clear').addEventListener('click', () => {
-  if (!plan.length) return;
-  plan = []; savePlan(); syncAddBtn(); renderPlanner();
+  if (!plan.length && dayMeta.count === 1) return;
+  if (!window.confirm('Clear the whole trip — all days and stops?')) return;
+  plan = []; dayMeta = { count: 1, active: 1, names: {} };
+  savePlan(); syncAddBtn(); renderPlanner();
 });
+
+// ---- Trip start date (drives the calendar dates in a shared itinerary) ----
+const tripStartInput = document.getElementById('trip-start');
+if (dayMeta.startDate) tripStartInput.value = dayMeta.startDate;
+tripStartInput.addEventListener('change', () => {
+  if (tripStartInput.value) dayMeta.startDate = tripStartInput.value; else delete dayMeta.startDate;
+  savePlan();
+});
+// Parse a YYYY-MM-DD string as a *local* date (no timezone shift), add N days.
+function dateForDay(dayIdx) {
+  if (!dayMeta.startDate) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayMeta.startDate);
+  if (!m) return null;
+  const d = new Date(+m[1], +m[2] - 1, +m[3]);
+  d.setDate(d.getDate() + (dayIdx - 1));
+  return d;
+}
+
+// ---- Build a human-readable, shareable day-by-day itinerary ----
+function buildItineraryText() {
+  const lines = [];
+  const totalDist = plan.reduce((n, t) => n + num(t.length), 0);
+  const totalGain = plan.reduce((n, t) => n + num(t.gain), 0);
+  lines.push(`🥾 My trail trip — ${dayMeta.count} day${dayMeta.count === 1 ? '' : 's'}`);
+  if (dayMeta.startDate) {
+    const s = dateForDay(1);
+    if (s) lines.push(`Starting ${s.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`);
+  }
+  lines.push('');
+  for (let d = 1; d <= dayMeta.count; d++) {
+    const dt = dateForDay(d);
+    const dateLabel = dt ? ' · ' + dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : '';
+    lines.push(`Day ${d}: ${dayName(d)}${dateLabel}`);
+    const items = plan.filter(p => p.day === d);
+    if (!items.length) { lines.push('  (no stops planned yet)'); lines.push(''); continue; }
+    items.forEach(t => {
+      const meta = [t.length, t.gain].filter(Boolean).join(', ');
+      lines.push(`  • ${t.name}${meta ? ' — ' + meta : ''}`);
+      if (t.lat != null) lines.push(`    📍 https://maps.google.com/?q=${t.lat},${t.lon}`);
+    });
+    lines.push('');
+  }
+  lines.push(`Total: ${totalDist.toFixed(1)} mi · ${totalGain.toLocaleString()} ft`);
+  lines.push('Shared from Trail App');
+  return lines.join('\n');
+}
+
+// ---- Share trip plan (PAID): opens the native iOS/Android share sheet ----
+async function shareTripPlan() {
+  if (!plan.length) { alert('Add some trails or routes to your plan first, then share it.'); return; }
+  const btn = document.getElementById('plan-share');
+  const text = buildItineraryText();
+  btn.disabled = true; const label = btn.textContent; btn.textContent = '📤 Opening share…';
+  try {
+    const res = await window.TripShare.share({
+      title: 'My trail trip plan',
+      text,
+      dialogTitle: 'Share your trip plan'
+    });
+    if (res.method === 'clipboard' && res.ok) alert('Trip plan copied to clipboard — paste it into any message or email.');
+    else if (res.method === 'none') alert('Sharing isn’t available here. Your itinerary:\n\n' + res.text);
+  } finally {
+    btn.disabled = false; btn.textContent = label;
+  }
+}
+document.getElementById('plan-share').addEventListener('click', () =>
+  requirePro('Sharing your trip plan', shareTripPlan));
+
+// ============================================================================
+//  Custom Route Planner (PAID) — draw, edit & snap routes to the trail network
+//  Routes are saved on-device and can be dropped onto any day of the trip plan.
+// ============================================================================
+const RoutePlanner = (() => {
+  const KEY = 'trailapp.routes.v1';
+  const SNAP_M = 45;                 // snap a dropped point onto a trail within this many metres
+  let routes = [];
+  try { routes = JSON.parse(localStorage.getItem(KEY)) || []; } catch {}
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(routes)); } catch {} }
+
+  // --- geometry helpers (metres) ---
+  const R = 6371000;
+  function haversine(a, b) {
+    const dLat = (b[0] - a[0]) * Math.PI / 180, dLon = (b[1] - a[1]) * Math.PI / 180;
+    const la1 = a[0] * Math.PI / 180, la2 = b[0] * Math.PI / 180;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+  function routeMiles(pts) { let m = 0; for (let i = 1; i < pts.length; i++) m += haversine(pts[i - 1], pts[i]); return m / 1609.34; }
+  // Nearest point on segment AB to P, in local metres (equirectangular about P's latitude).
+  function nearestOnSeg(p, a, b) {
+    const k = Math.cos(p[0] * Math.PI / 180);
+    const px = p[1] * k, py = p[0], ax = a[1] * k, ay = a[0], bx = b[1] * k, by = b[0];
+    const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+    let t = len2 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const cx = ax + t * dx, cy = ay + t * dy;
+    return { lat: cy, lng: cx / k, distM: haversine([p[0], p[1]], [cy, cx / k]) };
+  }
+  // Try to pull a clicked point onto the nearest loaded trail line.
+  function snap(latlng) {
+    const specs = [usgsTrailSpec, runTrailSpec, mtbTrailSpec].filter(s => s && s.layer && s.cb && s.cb.checked);
+    let best = null;
+    specs.forEach(spec => spec.layer.eachLayer(l => {
+      if (!l.getLatLngs) return;
+      let segs = l.getLatLngs();
+      if (segs.length && Array.isArray(segs[0])) segs = segs.flat();    // MultiLineString
+      for (let i = 1; i < segs.length; i++) {
+        const r = nearestOnSeg([latlng.lat, latlng.lng], [segs[i - 1].lat, segs[i - 1].lng], [segs[i].lat, segs[i].lng]);
+        if (r.distM < SNAP_M && (!best || r.distM < best.distM)) best = r;
+      }
+    }));
+    return best ? { lat: best.lat, lng: best.lng, snapped: true } : { lat: latlng.lat, lng: latlng.lng, snapped: false };
+  }
+
+  // --- drawing state ---
+  let drawing = false, editingId = null, pts = [], line = null, verts = [], snapOn = true;
+  const tb = document.getElementById('route-toolbar');
+  const elTitle = document.getElementById('rt-title'), elDist = document.getElementById('rt-dist');
+
+  function refresh() {
+    if (line) line.setLatLngs(pts);
+    verts.forEach(v => map.removeLayer(v));
+    verts = pts.map((p, i) => L.circleMarker(p, { radius: 5, color: '#1f6feb', fillColor: '#fff', fillOpacity: 1, weight: 2 })
+      .addTo(map).on('click', e => { L.DomEvent.stop(e); pts.splice(i, 1); refresh(); }));
+    elDist.textContent = `${routeMiles(pts).toFixed(1)} mi · ${pts.length} pts`;
+  }
+  function onMapClick(e) {
+    const s = snapOn ? snap(e.latlng) : { lat: e.latlng.lat, lng: e.latlng.lng };
+    pts.push([s.lat, s.lng]);
+    refresh();
+  }
+  function begin(existing) {
+    if (drawing) cancel();
+    drawing = true;
+    editingId = existing ? existing.id : null;
+    pts = existing ? existing.pts.map(p => p.slice()) : [];
+    elTitle.textContent = existing ? `Editing: ${existing.name}` : 'New route';
+    snapOn = document.getElementById('rt-snap-cb').checked;
+    line = L.polyline(pts, { color: '#1f6feb', weight: 4, opacity: .9, dashArray: '1,0' }).addTo(map);
+    document.querySelector('nav button[data-tab="map"]').click();
+    tb.classList.add('open');
+    map.on('click', onMapClick);
+    refresh();
+  }
+  function teardown() {
+    map.off('click', onMapClick);
+    if (line) { map.removeLayer(line); line = null; }
+    verts.forEach(v => map.removeLayer(v)); verts = [];
+    tb.classList.remove('open');
+    drawing = false; pts = []; editingId = null;
+  }
+  function cancel() { teardown(); }
+  function finish() {
+    if (pts.length < 2) { alert('Add at least two points to save a route.'); return; }
+    const miles = routeMiles(pts);
+    const suggested = editingId ? (routes.find(r => r.id === editingId) || {}).name : '';
+    const name = (window.prompt('Name this route:', suggested || `Custom route (${miles.toFixed(1)} mi)`) || '').trim();
+    if (!name) return;
+    let route;
+    if (editingId) {
+      route = routes.find(r => r.id === editingId);
+      Object.assign(route, { name, pts: pts.map(p => p.slice()), miles });
+    } else {
+      route = { id: 'r' + Date.now().toString(36), name, pts: pts.map(p => p.slice()), miles, createdAt: Date.now() };
+      routes.push(route);
+    }
+    save();
+    teardown();
+    renderPlanner();
+    if (window.confirm(`Saved "${name}". Add it to ${typeof dayName === 'function' ? dayName(dayMeta.active) : 'your plan'}?`)) {
+      const item = { kind: 'route', routeId: route.id, name: route.name, length: `${miles.toFixed(1)} mi`,
+        lat: route.pts[0][0], lon: route.pts[0][1], diff: 'route' };
+      if (!inPlan(item)) togglePlan(item);
+    }
+    show(route.id);
+  }
+
+  // Draw a saved route read-only with an action popup.
+  let shownLayer = null;
+  function show(id) {
+    const route = routes.find(r => r.id === id);
+    if (!route) return;
+    if (shownLayer) { map.removeLayer(shownLayer); shownLayer = null; }
+    document.querySelector('nav button[data-tab="map"]').click();
+    shownLayer = L.polyline(route.pts, { color: '#1f6feb', weight: 5, opacity: .85 }).addTo(map);
+    map.fitBounds(shownLayer.getBounds(), { padding: [40, 40] });
+    const html = `<strong>🗺️ ${route.name}</strong><br><small>${route.miles.toFixed(1)} mi · ${route.pts.length} points</small>` +
+      `<div style="margin-top:6px;display:flex;gap:6px"><button class="rsp-edit" style="flex:1;padding:5px;border:1px solid #1f6feb;background:#1f6feb;color:#fff;border-radius:6px;font-size:12px;cursor:pointer">Edit</button>` +
+      `<button class="rsp-del" style="flex:1;padding:5px;border:1px solid #c0392b;background:#fff;color:#c0392b;border-radius:6px;font-size:12px;cursor:pointer">Delete</button></div>`;
+    const popup = L.popup({ closeButton: true }).setLatLng(route.pts[Math.floor(route.pts.length / 2)]).setContent(html).openOn(map);
+    setTimeout(() => {
+      const c = popup.getElement(); if (!c) return;
+      const e = c.querySelector('.rsp-edit'), d = c.querySelector('.rsp-del');
+      if (e) e.onclick = () => { map.closePopup(); if (shownLayer) { map.removeLayer(shownLayer); shownLayer = null; } begin(route); };
+      if (d) d.onclick = () => {
+        if (!window.confirm(`Delete route "${route.name}"?`)) return;
+        routes = routes.filter(r => r.id !== id); save();
+        plan = plan.filter(p => p.routeId !== id); savePlan();
+        map.closePopup(); if (shownLayer) { map.removeLayer(shownLayer); shownLayer = null; }
+        renderPlanner();
+      };
+    }, 0);
+  }
+
+  // Edit entry point: pick a saved route to edit (or tell the user to create one).
+  function pickToEdit() {
+    if (!routes.length) { alert('No saved routes yet. Tap “Create New Plan” to draw your first route.'); return; }
+    if (routes.length === 1) { show(routes[0].id); return; }
+    const list = routes.map((r, i) => `${i + 1}. ${r.name} (${r.miles.toFixed(1)} mi)`).join('\n');
+    const pick = window.prompt(`Which route to edit?\n\n${list}\n\nEnter a number 1–${routes.length}:`, '1');
+    const idx = parseInt(pick, 10) - 1;
+    if (idx >= 0 && idx < routes.length) show(routes[idx].id);
+  }
+
+  document.getElementById('rt-undo').addEventListener('click', () => { pts.pop(); refresh(); });
+  document.getElementById('rt-finish').addEventListener('click', finish);
+  document.getElementById('rt-cancel').addEventListener('click', cancel);
+  document.getElementById('rt-snap-cb').addEventListener('change', e => { snapOn = e.target.checked; });
+  return {
+    createNew: () => begin(null),
+    edit: pickToEdit,
+    show,
+    list: () => routes.slice()
+  };
+})();
+window.RoutePlanner = RoutePlanner;
 
 // ---------- Trip Kit: hike type → gear, regional hazards, vehicle/rig ----------
 const HIKE_TYPES = [
@@ -1682,7 +2138,7 @@ function renderTrails(list) {
     L.marker([t.lat, t.lon], { icon, title: t.name })
       .addTo(trailLayer)
       .bindTooltip(t.name)
-      .on('click', () => showTrail(t));
+      .on('click', e => { showTrail(t); namePopup(e.latlng, `<strong>${t.name}</strong>`); });
     // Parking marker — same 24px circle as the trailhead (.te) icon, blue "P".
     if (t.parking && t.parking.lat != null) {
       const pIcon = L.divIcon({
@@ -1693,7 +2149,7 @@ function renderTrails(list) {
       L.marker([t.parking.lat, t.parking.lon], { icon: pIcon, title: 'Parking — ' + t.name })
         .addTo(trailLayer)
         .bindTooltip('Parking' + (t.parking.note ? ' · ' + t.parking.note : ''))
-        .on('click', () => showTrail(t));
+        .on('click', e => { showTrail(t); namePopup(e.latlng, `<strong>Parking</strong><br><small>${t.name}</small>`); });
     }
   });
 }
@@ -1786,22 +2242,6 @@ function goToState(s) {
   map.setView([s[2], s[3]], s[4]);                // moveend -> land + cadastral + trails load
 }
 
-const stateGrid = document.getElementById('state-grid');
-function renderStates(filter) {
-  const q = (filter || '').toLowerCase();
-  stateGrid.innerHTML = '';
-  STATES.filter(s => !q || s[1].toLowerCase().includes(q) || s[5].toLowerCase().includes(q) || s[0].toLowerCase() === q)
-    .forEach(s => {
-      const card = document.createElement('button');
-      card.className = 'state-card';
-      card.innerHTML = `<span class="sc-name">${s[1]}<span class="sc-abbr">${s[0]}</span></span><span class="sc-area">${s[5]}</span>`;
-      card.addEventListener('click', () => goToState(s));
-      stateGrid.appendChild(card);
-    });
-}
-renderStates();
-document.getElementById('state-search').addEventListener('input', e => renderStates(e.target.value));
-
 // ---------- Populate the header dropdown (Featured + all 50 states) & keep in sync ----------
 (function populateRegionSelect() {
   const featured = document.createElement('optgroup');
@@ -1826,6 +2266,117 @@ regionSelect.addEventListener('change', e => {
   if (kind === 'region') goToRegion(id);
   else if (kind === 'state') { const s = STATES.find(x => x[0] === id); if (s) goToState(s); }
 });
+
+// ---------- Trail name search (curated guides + live USGS trail network) ----------
+(function trailSearch() {
+  const input = document.getElementById('ts-input');
+  const results = document.getElementById('ts-results');
+  const clearBtn = document.getElementById('ts-clear');
+  if (!input) return;
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const curated = () => Object.values(regions).flatMap(r => r.trails);
+
+  function firstCoord(geom) {
+    if (!geom) return null;
+    let c = geom.coordinates;
+    while (Array.isArray(c) && Array.isArray(c[0])) c = c[0];
+    return Array.isArray(c) && c.length >= 2 ? [c[1], c[0]] : null; // [lat, lon]
+  }
+
+  async function searchUsgs(q, token) {
+    const where = `UPPER(name) LIKE UPPER('%${q.replace(/'/g, "''")}%')`;
+    const params = new URLSearchParams({
+      where, outFields: TRAIL_OUTFIELDS, returnGeometry: 'true', outSR: '4326',
+      f: 'geojson', resultRecordCount: '40', orderByFields: 'name'
+    });
+    const gj = await (await fetch(`${TRAILS_URL}/query?${params}`)).json();
+    if (token !== runToken) return null;                 // stale
+    const seen = new Set(), out = [];
+    (gj.features || []).forEach(f => {
+      const name = f.properties && f.properties.name; if (!name) return;
+      const ll = firstCoord(f.geometry); if (!ll) return;
+      const key = name.toLowerCase();
+      if (seen.has(key)) return; seen.add(key);
+      out.push({ props: f.properties, ll });
+    });
+    return out;
+  }
+
+  function open() { results.classList.add('open'); }
+  function close() { results.classList.remove('open'); }
+  function pickCurated(t) {
+    close(); input.blur();
+    map.setView([t.lat, t.lon], 14);
+    showTrail(t);
+    namePopup(L.latLng(t.lat, t.lon), `<strong>${esc(t.name)}</strong>`);
+  }
+  function pickUsgs(r) {
+    close(); input.blur();
+    map.setView(r.ll, 14);
+    // Make sure the USGS trail layer is on so the line is visible at the target.
+    const cb = document.querySelector('input[data-trails="usgs"]');
+    if (cb && !cb.checked) { cb.checked = true; cb.dispatchEvent(new Event('change', { bubbles: true })); }
+    showUsgsTrail(r.props, L.latLng(r.ll[0], r.ll[1]));
+    namePopup(L.latLng(r.ll[0], r.ll[1]), `<strong>${esc(r.props.name)}</strong>`);
+  }
+
+  function render(q, curatedHits, usgs) {
+    results.innerHTML = '';
+    if (curatedHits.length) {
+      results.insertAdjacentHTML('beforeend', `<div class="ts-group">Featured guides</div>`);
+      curatedHits.forEach(t => {
+        const row = document.createElement('div');
+        row.className = 'ts-item';
+        row.innerHTML = `<span class="ts-bar" style="background:${diffColors[t.diff] || '#1f6feb'}"></span>` +
+          `<div><div class="ts-name">${esc(t.name)}</div>` +
+          `<div class="ts-meta">${[t.length, t.gain, t.diff, t.land].filter(Boolean).join(' · ')}</div></div>`;
+        row.addEventListener('click', () => pickCurated(t));
+        results.appendChild(row);
+      });
+    }
+    if (usgs === 'loading') {
+      results.insertAdjacentHTML('beforeend', `<div class="ts-status">Searching the USGS trail network…</div>`);
+    } else if (Array.isArray(usgs)) {
+      if (usgs.length) {
+        results.insertAdjacentHTML('beforeend', `<div class="ts-group">USGS trail network</div>`);
+        usgs.forEach(r => {
+          const len = r.props.lengthmiles ? `${(+r.props.lengthmiles).toFixed(1)} mi` : '';
+          const row = document.createElement('div');
+          row.className = 'ts-item';
+          row.innerHTML = `<span class="ts-bar"></span>` +
+            `<div><div class="ts-name">${esc(r.props.name)}</div>` +
+            `<div class="ts-meta">${[len, r.props.trailsurface, r.props.primarytrailmaintainer].filter(Boolean).join(' · ') || 'USGS trail'}</div></div>`;
+          row.addEventListener('click', () => pickUsgs(r));
+          results.appendChild(row);
+        });
+      } else if (!curatedHits.length) {
+        results.insertAdjacentHTML('beforeend', `<div class="ts-empty">No trails found for “${esc(q)}”. Try fewer letters or a different spelling.</div>`);
+      }
+    } else if (!curatedHits.length && q.length < 3) {
+      results.insertAdjacentHTML('beforeend', `<div class="ts-status">Keep typing to search the national trail network…</div>`);
+    }
+    open();
+  }
+
+  let runToken = 0, debounce = null;
+  function run() {
+    const q = input.value.trim();
+    clearBtn.style.display = q ? 'block' : 'none';
+    if (!q) { close(); return; }
+    const token = ++runToken;
+    const curatedHits = curated().filter(t => t.name.toLowerCase().includes(q.toLowerCase()));
+    if (q.length < 3) { render(q, curatedHits, null); return; }
+    render(q, curatedHits, 'loading');
+    searchUsgs(q, token)
+      .then(usgs => { if (usgs && token === runToken) render(q, curatedHits, usgs); })
+      .catch(() => { if (token === runToken) render(q, curatedHits, []); });
+  }
+
+  input.addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(run, 280); });
+  input.addEventListener('focus', () => { if (input.value.trim()) run(); });
+  clearBtn.addEventListener('click', () => { input.value = ''; clearBtn.style.display = 'none'; close(); input.focus(); });
+  document.addEventListener('click', e => { if (!document.getElementById('trail-search').contains(e.target)) close(); });
+})();
 
 // STATES now exists, so the planner (which derives permit area from it) can render.
 renderPlanner();
@@ -2227,7 +2778,7 @@ window.__toolCluster = toolCluster;
 // Everything is already auto-saved to localStorage; this bundles it into one
 // file so progress survives reinstalls / new devices and can be shared.
 (function () {
-  const KEYS = ['trailapp.plan.v1', 'trailapp.triptype', 'trailapp.gear',
+  const KEYS = ['trailapp.plan.v1', 'trailapp.plandays.v1', 'trailapp.routes.v1', 'trailapp.triptype', 'trailapp.gear',
     'trailapp.waypoints', 'trailapp.tracks', 'trailapp.mytrails', 'trailapp.mapmode'];
   const backupBtn = document.getElementById('plan-backup');
   const restoreBtn = document.getElementById('plan-restore');
@@ -2247,7 +2798,7 @@ window.__toolCluster = toolCluster;
     try {
       if (navigator.canShare && typeof File !== 'undefined') {
         const file = new File([blob], fname, { type: 'application/json' });
-        if (navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: 'Trail App trip backup' }).catch(() => {}); flash('✓ Trip backed up'); return; }
+        if (navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: 'Blackrow Trails trip backup' }).catch(() => {}); flash('✓ Trip backed up'); return; }
       }
     } catch (e) { /* fall through to download */ }
     const url = URL.createObjectURL(blob);
@@ -2267,7 +2818,7 @@ window.__toolCluster = toolCluster;
       let payload;
       try { payload = JSON.parse(String(reader.result)); } catch { flash('Couldn’t read that file', false); return; }
       if (!payload || payload.app !== 'trail-app' || payload.kind !== 'trip-backup' || !payload.data) {
-        flash('Not a Trail App backup file', false); return;
+        flash('Not a Blackrow Trails backup file', false); return;
       }
       const when = payload.savedAt ? new Date(payload.savedAt).toLocaleString() : 'unknown date';
       if (!window.confirm(`Restore this trip backup (saved ${when})?\n\nThis replaces your current plan, waypoints, tracks, and saved trails on this device.`)) return;
@@ -2300,7 +2851,7 @@ window.__toolCluster = toolCluster;
     });
   }
   if (wipe) wipe.addEventListener('click', () => {
-    if (!window.confirm('Delete ALL Trail App data on this device?\n\nThis permanently removes your plan, waypoints, recorded tracks, saved trails, gear list, and settings. Back up first if you want to keep them. This cannot be undone.')) return;
+    if (!window.confirm('Delete ALL Blackrow Trails data on this device?\n\nThis permanently removes your plan, waypoints, recorded tracks, saved trails, gear list, and settings. Back up first if you want to keep them. This cannot be undone.')) return;
     try {
       const keys = [];
       for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('trailapp.') === 0) keys.push(k); }
@@ -2462,7 +3013,12 @@ window.__toolCluster = toolCluster;
       overlay.style.display = 'none';
     }
 
-    dlBtn.addEventListener('click', open);
+    // Offline map downloads are a paid feature; free users get the paywall,
+    // and the download opens automatically once they unlock.
+    dlBtn.addEventListener('click', () => {
+      if (window.requirePro) window.requirePro('Offline map downloads', open);
+      else open();
+    });
     $('dl-cancel').addEventListener('click', close);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     $('dl-start').addEventListener('click', async () => {
@@ -2651,13 +3207,13 @@ window.__toolCluster = toolCluster;
       const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       const body = waypoints.map(w =>
         `  <wpt lat="${(+w.lat).toFixed(6)}" lon="${(+w.lon).toFixed(6)}">\n    <name>${esc(w.label || 'Waypoint')}</name>\n  </wpt>`).join('\n');
-      const gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Trail App" xmlns="http://www.topografix.com/GPX/1/1">\n${body}\n</gpx>\n`;
+      const gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Blackrow Trails" xmlns="http://www.topografix.com/GPX/1/1">\n${body}\n</gpx>\n`;
       const fname = 'trail-app-waypoints.gpx';
       const blob = new Blob([gpx], { type: 'application/gpx+xml' });
       try {
         if (navigator.canShare && typeof File !== 'undefined') {
           const file = new File([blob], fname, { type: 'application/gpx+xml' });
-          if (navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: 'Trail App waypoints' }).catch(() => {}); return; }
+          if (navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: 'Blackrow Trails waypoints' }).catch(() => {}); return; }
         }
       } catch (e) { /* fall through to download */ }
       const url = URL.createObjectURL(blob);
@@ -2864,7 +3420,7 @@ window.__toolCluster = toolCluster;
       if (bg) {
         try {
           bgWatcherId = await bg.addWatcher({
-            backgroundTitle: 'Trail App — recording',
+            backgroundTitle: 'Blackrow Trails — recording',
             backgroundMessage: 'Recording your track. Tap to return.',
             requestPermissions: true, stale: false, distanceFilter: MIN_MOVE
           }, (location, error) => {
@@ -2930,7 +3486,16 @@ window.__toolCluster = toolCluster;
       else { beginSegment(); startWatch(); }  // new segment so the gap isn't drawn as a line
     }
 
-    btn.addEventListener('click', () => { if (!recording) start(); });
+    btn.addEventListener('click', () => {
+      if (recording) return;
+      // Free tier: basic real-time tracking is allowed only while connected to
+      // cellular/data. Offline recording is a paid (Trail Pro) feature.
+      if (window.Entitlement && !window.Entitlement.isPro() && navigator.onLine === false) {
+        window.showPaywall('Recording offline (no signal)');
+        return;
+      }
+      start();
+    });
     hq('tr-pause').addEventListener('click', pauseToggle);
     hq('tr-stop').addEventListener('click', stop);
 
@@ -2943,7 +3508,7 @@ window.__toolCluster = toolCluster;
         const time = (!stripTime && p.ts) ? `\n        <time>${new Date(p.ts).toISOString()}</time>` : '';
         return `      <trkpt lat="${(+p.lat).toFixed(6)}" lon="${(+p.lon).toFixed(6)}">${ele}${time}\n      </trkpt>`;
       }).join('\n') + '\n    </trkseg>').join('\n');
-      return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Trail App" xmlns="http://www.topografix.com/GPX/1/1">\n  <trk>\n    <name>${esc(t.name)}</name>\n${segs}\n  </trk>\n</gpx>\n`;
+      return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Blackrow Trails" xmlns="http://www.topografix.com/GPX/1/1">\n  <trk>\n    <name>${esc(t.name)}</name>\n${segs}\n  </trk>\n</gpx>\n`;
     }
     function exportTrack(t) {
       const fname = (t.name.replace(/[^\w-]+/g, '_').slice(0, 40) || 'track') + '.gpx';
@@ -3162,7 +3727,7 @@ window.__toolCluster = toolCluster;
       const segs = (t.segments || []).map(s => '    <trkseg>\n' + s.map(p =>
         `      <trkpt lat="${(+p.lat).toFixed(6)}" lon="${(+p.lon).toFixed(6)}">${p.ele != null ? `\n        <ele>${(+p.ele).toFixed(1)}</ele>` : ''}\n      </trkpt>`).join('\n') + '\n    </trkseg>').join('\n');
       const desc = t.notes ? `\n    <desc>${esc(t.notes)}</desc>` : '';
-      return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Trail App" xmlns="http://www.topografix.com/GPX/1/1">\n  <trk>\n    <name>${esc(t.name)}</name>${desc}\n${segs}\n  </trk>\n</gpx>\n`;
+      return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Blackrow Trails" xmlns="http://www.topografix.com/GPX/1/1">\n  <trk>\n    <name>${esc(t.name)}</name>${desc}\n${segs}\n  </trk>\n</gpx>\n`;
     }
     function exportTrail(t) {
       const fname = (t.name.replace(/[^\w-]+/g, '_').slice(0, 40) || 'trail') + '.gpx';
@@ -3250,6 +3815,212 @@ window.__toolCluster = toolCluster;
     buildMyTrailsUI(mapEl);
   });
 })();
+</script>
+<div id="paywall" role="dialog" aria-modal="true" aria-labelledby="pw-title">
+  <div class="pw-card">
+    <h2 id="pw-title">Unlock with Trail Pro</h2>
+    <p class="pw-feat"><span class="pw-hi" id="pw-feature">This feature</span> is part of Trail Pro.</p>
+    <ul class="feature-list">
+      <li><span class="fi">🗺️</span><span><strong>Custom Route Planner</strong> — draw, edit &amp; snap routes to the trail network</span></li>
+      <li><span class="fi">⬇️</span><span><strong>Offline Map Downloads</strong> — topo maps that work when cell service drops</span></li>
+      <li><span class="fi">🗻</span><span><strong>Advanced Overlays</strong> — land borders, slope-angle shading &amp; live weather</span></li>
+      <li><span class="fi">🔔</span><span><strong>Safety Alerts</strong> — wrong-turn audio warnings when you drift off route</span></li>
+    </ul>
+    <p class="pw-price" id="pw-price">$4.99/mo or $39.99/yr · cancel anytime</p>
+    <div class="pw-actions">
+      <button class="btn-paid" id="pw-trial">Start 14-day free trial</button>
+      <button class="btn-paid secondary" id="pw-subscribe">Subscribe now</button>
+      <button class="pw-dismiss" id="pw-restore">Restore purchases</button>
+      <button class="pw-dismiss" id="pw-close">Maybe later</button>
+    </div>
+    <p class="pw-note">Trail Pro is an auto-renewable subscription. Payment is charged to your store account at confirmation of purchase. The free trial converts to a paid subscription after 14 days unless cancelled at least 24 hours before the trial ends. Manage or cancel anytime in your account settings.</p>
+    <p class="pw-legal"><a id="pw-terms" href="https://scking21.github.io/Trail-App/terms.html" target="_blank" rel="noopener">Terms of Use (EULA)</a> · <a id="pw-privacy" href="https://scking21.github.io/Trail-App/privacy.html" target="_blank" rel="noopener">Privacy Policy</a></p>
+  </div>
+</div>
+
+<script>
+// ============================================================================
+//  Monetization: Free / 14-day Trial / Paid (Trail Pro)
+//  - Free:   Trail Discovery + basic real-time tracking (online only)
+//  - Trial:  full Pro access for 14 days
+//  - Paid:   full Pro access
+//  Pro features: Custom Route Planner, Offline Downloads, Advanced Overlays,
+//  Safety (off-route) Alerts, and offline track recording.
+// ============================================================================
+const Entitlement = (() => {
+  const KEY = 'trailapp.entitlement';
+  const TRIAL_DAYS = 14, DAY = 86400000;
+  function load() {
+    try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; }
+  }
+  function save(s) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch {} ; emit(); }
+  const listeners = [];
+  function emit() { listeners.forEach(fn => { try { fn(); } catch {} }); }
+
+  function trialActive(s) {
+    return s.plan === 'trial' && s.trialStart && (Date.now() - s.trialStart) < TRIAL_DAYS * DAY;
+  }
+  return {
+    onChange(fn) { listeners.push(fn); },
+    plan() {                       // effective plan
+      const s = load();
+      if (s.plan === 'paid') return 'paid';
+      if (trialActive(s)) return 'trial';
+      return 'free';
+    },
+    isPro() { return this.plan() !== 'free'; },
+    trialDaysLeft() {
+      const s = load();
+      if (s.plan !== 'trial' || !s.trialStart) return 0;
+      return Math.max(0, Math.ceil((TRIAL_DAYS * DAY - (Date.now() - s.trialStart)) / DAY));
+    },
+    trialUsed() { return !!load().trialStart; },
+    startTrial() { if (this.trialUsed()) return false; save({ plan: 'trial', trialStart: Date.now() }); return true; },
+    subscribe() { const s = load(); s.plan = 'paid'; s.subAt = Date.now(); save(s); },
+    downgrade() { save({ plan: 'free', trialStart: load().trialStart }); },  // for testing/cancel
+    // Sync from the real store (called by billing.js after a purchase/restore/refresh).
+    setFromStore(active) {
+      const s = load();
+      if (active) { s.plan = 'paid'; s.viaStore = true; if (!s.subAt) s.subAt = Date.now(); save(s); }
+      else if (s.viaStore) { s.plan = 'free'; delete s.viaStore; save(s); }
+    }
+  };
+})();
+window.Entitlement = Entitlement;
+
+// ---------- Paywall modal ----------
+const paywall = document.getElementById('paywall');
+const pwFeature = document.getElementById('pw-feature');
+const pwTrialBtn = document.getElementById('pw-trial');
+let pwAfterUnlock = null;
+function showPaywall(featureName, onUnlock) {
+  pwFeature.textContent = featureName || 'This feature';
+  pwAfterUnlock = onUnlock || null;
+  pwTrialBtn.disabled = Entitlement.trialUsed();
+  pwTrialBtn.textContent = Entitlement.trialUsed() ? 'Free trial already used' : 'Start 14-day free trial';
+  paywall.classList.add('open');
+  updatePwPrice();
+}
+
+// Show the real localized store prices (App Store / Play) when billing is live,
+// so the paywall matches what the OS charges. Falls back to the static text.
+async function updatePwPrice() {
+  const el = document.getElementById('pw-price');
+  if (!el || !billingLive()) return;
+  try {
+    const offering = await window.Billing.getOfferings();
+    const pkgs = offering && offering.availablePackages || [];
+    const priceFor = id => {
+      const p = pkgs.find(p => p.product && p.product.identifier === id);
+      return p && p.product && p.product.priceString;
+    };
+    const mo = priceFor(window.Billing.PRODUCTS.monthly);
+    const yr = priceFor(window.Billing.PRODUCTS.yearly);
+    if (mo && yr) el.textContent = `${mo}/mo or ${yr}/yr · cancel anytime`;
+  } catch (e) { /* keep static fallback */ }
+}
+function closePaywall() { paywall.classList.remove('open'); pwAfterUnlock = null; }
+function unlocked() { const cb = pwAfterUnlock; closePaywall(); if (cb) cb(); renderMembership(); }
+const billingLive = () => window.Billing && window.Billing.isAvailable();
+
+// Trial: through the store's introductory offer when live, else simulate.
+pwTrialBtn.addEventListener('click', async () => {
+  if (billingLive()) { if (await window.Billing.purchase('monthly')) unlocked(); return; }
+  if (Entitlement.startTrial()) unlocked();
+});
+// Subscribe: real store purchase when live, else simulate.
+document.getElementById('pw-subscribe').addEventListener('click', async () => {
+  if (billingLive()) { if (await window.Billing.purchase('yearly')) unlocked(); return; }
+  Entitlement.subscribe(); unlocked();
+});
+document.getElementById('pw-close').addEventListener('click', closePaywall);
+document.getElementById('pw-restore').addEventListener('click', async () => {
+  if (billingLive()) { await window.Billing.restore(); }
+  renderMembership();
+  if (Entitlement.isPro()) unlocked();
+});
+paywall.addEventListener('click', e => { if (e.target === paywall) closePaywall(); });
+
+// requirePro: run `action` if entitled, else open the paywall (and run it after unlock).
+function requirePro(featureName, action) {
+  if (Entitlement.isPro()) { action && action(); return true; }
+  showPaywall(featureName, action);
+  return false;
+}
+window.requirePro = requirePro;
+window.showPaywall = showPaywall;
+
+// ---------- Membership UI ----------
+function renderMembership() {
+  const plan = Entitlement.plan();
+  const badge = document.getElementById('plan-badge');
+  const status = document.getElementById('plan-status');
+  const actions = document.getElementById('plan-actions');
+  const lock = document.getElementById('planner-lock');
+  if (!badge) return;
+  badge.className = 'plan-badge ' + plan;
+  if (plan === 'paid') {
+    badge.textContent = 'Trail Pro';
+    status.textContent = 'Trail Pro is active — all features unlocked. Thanks for supporting the app!';
+    actions.innerHTML = '';
+  } else if (plan === 'trial') {
+    const d = Entitlement.trialDaysLeft();
+    badge.textContent = 'Pro Trial';
+    status.textContent = `Free trial active — ${d} day${d === 1 ? '' : 's'} left of full Trail Pro access.`;
+    actions.innerHTML = '<button class="btn-paid" id="plan-sub">Subscribe to keep Pro</button>';
+    actions.querySelector('#plan-sub').onclick = () => { Entitlement.subscribe(); renderMembership(); };
+  } else {
+    badge.textContent = 'Free';
+    status.textContent = "You're on the free plan — Trail Discovery and basic real-time tracking (cellular only).";
+    actions.innerHTML =
+      (Entitlement.trialUsed() ? '' : '<button class="btn-paid" id="plan-trial">Start 14-day free trial</button>') +
+      '<button class="btn-paid secondary" id="plan-up">See Trail Pro</button>';
+    const t = actions.querySelector('#plan-trial');
+    if (t) t.onclick = () => { Entitlement.startTrial(); renderMembership(); };
+    actions.querySelector('#plan-up').onclick = () => showPaywall('Trail Pro');
+  }
+  if (lock) lock.style.display = plan === 'free' ? '' : 'none';
+  applyOverlayGates();
+}
+
+// ---------- Custom Route Planner entry points (paid) ----------
+document.getElementById('route-new').addEventListener('click', () =>
+  requirePro('The Custom Route Planner', () => window.RoutePlanner && window.RoutePlanner.createNew()));
+document.getElementById('route-edit').addEventListener('click', () =>
+  requirePro('Editing custom routes', () => window.RoutePlanner && window.RoutePlanner.edit()));
+
+// ---------- Gate: Advanced Map Overlays (land borders, slope shading, weather) ----------
+const GATED_OVERLAYS = '#slope-toggle, #radar-toggle, input[data-layer], input[data-cad]';
+// Intercept clicks on gated overlay checkboxes for free users before they toggle.
+document.addEventListener('click', e => {
+  const el = e.target.closest && e.target.closest(GATED_OVERLAYS);
+  if (!el || Entitlement.isPro()) return;
+  e.preventDefault(); e.stopPropagation();
+  showPaywall('Advanced map overlays');
+}, true);
+// On load (and downgrade), turn OFF any default-on advanced overlays for free users.
+function applyOverlayGates() {
+  if (Entitlement.isPro()) return;
+  document.querySelectorAll(GATED_OVERLAYS).forEach(cb => {
+    if (cb.checked) { cb.checked = false; cb.dispatchEvent(new Event('change', { bubbles: true })); }
+  });
+}
+
+// ---------- Gate: Safety / off-route Follow alerts (paid) ----------
+document.addEventListener('click', e => {
+  const el = e.target.closest && e.target.closest('.tr-fol, .mt-fol');
+  if (!el || Entitlement.isPro()) return;
+  e.preventDefault(); e.stopPropagation();
+  showPaywall('Wrong-turn safety alerts');
+}, true);
+
+// Re-render membership whenever entitlement changes (incl. store sync from billing.js).
+Entitlement.onChange(renderMembership);
+renderMembership();
+// Keep the trial countdown fresh whenever the Planner tab opens.
+document.querySelector('nav button[data-tab="planner"]').addEventListener('click', renderMembership);
+// On a real device, pull live subscription status from the store on launch.
+if (window.Billing && window.Billing.isAvailable()) { window.Billing.refresh().then(renderMembership); }
 </script>
 </body>
 </html>

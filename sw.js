@@ -1,4 +1,4 @@
-/* Trail App service worker — offline app shell + map tile caching.
+/* Blackrow Trails service worker — offline app shell + map tile caching.
  * Lets previously-viewed areas load with no signal (backcountry use). */
 const SHELL_CACHE = 'trail-shell-v1';
 const TILE_CACHE  = 'trail-tiles-v1';
@@ -13,8 +13,8 @@ const DEV = /^(localhost|127\.0\.0\.1)$/.test(self.location.hostname) &&
 const SHELL_ASSETS = [
   './',
   './index.html',
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+  './vendor/leaflet/leaflet.css',
+  './vendor/leaflet/leaflet.js',
 ];
 
 self.addEventListener('install', (e) => {
