@@ -539,6 +539,7 @@
       <label class="layer-row"><input type="checkbox" checked data-trails="usgs"><span class="swatch" style="background:#c0563b"></span>Hiking Trails (USGS)</label>
       <label class="layer-row"><input type="checkbox" data-trails="run"><span class="swatch" style="background:repeating-linear-gradient(90deg,#2e8b57 0 5px,transparent 5px 8px)"></span>Trail Running (singletrack)</label>
       <label class="layer-row"><input type="checkbox" data-trails="mtb"><span class="swatch" style="background:repeating-linear-gradient(90deg,#7a3ca8 0 2px,transparent 2px 5px)"></span>Mountain Biking</label>
+      <label class="layer-row"><input type="checkbox" data-trails="osm"><span class="swatch" style="background:repeating-linear-gradient(90deg,#1f6f3c 0 6px,transparent 6px 8px,#1f6f3c 8px 9px,transparent 9px 11px)"></span>OSM Trails (OpenTrailMap)</label>
       <label class="layer-row"><input type="checkbox" checked id="endpoints-toggle"><span style="display:inline-flex;gap:2px"><span style="font-size:12px">🥾</span><span style="font-size:12px">🏁</span></span>Trailheads &amp; termini</label>
       <div class="legend-row" style="margin-top:8px"><span class="dot" style="background:var(--easy)"></span>Easy</div>
       <div class="legend-row"><span class="dot" style="background:var(--moderate)"></span>Moderate</div>
@@ -546,7 +547,8 @@
       <div class="legend-row" style="margin-top:8px"><span class="leg-line" style="border-top:2.5px solid #888"></span>Hiking — solid</div>
       <div class="legend-row"><span class="leg-line" style="border-top:2.5px dashed #888"></span>Trail running — dashed (natural-surface singletrack)</div>
       <div class="legend-row"><span class="leg-line" style="border-top:2.5px dotted #888"></span>Mountain biking — dotted (bike-permitted)</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4">Line &amp; marker color show difficulty (graded by length, est.). Line style shows activity. Run/bike layers filter the USGS trail network by surface and bike access.</div>
+      <div class="legend-row"><span class="leg-line" style="border-top:2.5px dashed #1f6f3c"></span>OSM trail — dash-dot (OpenStreetMap path network)</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4">Line &amp; marker color show difficulty (graded by length, est.). Line style shows activity. Run/bike layers filter the USGS trail network by surface and bike access. The OSM Trails layer adds the OpenStreetMap foot-path network (as visualized by <a href="https://github.com/osmus/OpenTrailMap" target="_blank" rel="noopener">OpenTrailMap</a>), graded by its <code>sac_scale</code> tag. Map data © OpenStreetMap contributors, <a href="https://opendatacommons.org/licenses/odbl/" target="_blank" rel="noopener">ODbL</a>. This is community-sourced data and may be inaccurate or incomplete — verify before relying on it, and <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener">report a problem</a>.</div>
     </section>
     <section>
       <h2>Off-Road / OHV <span id="offroad-status"></span></h2>
@@ -749,6 +751,14 @@ document.body.insertAdjacentHTML('beforeend', svgDefs);
 function offsetForZoom(z) { return z >= 13 ? 0 : z >= 11 ? 0.0008 : z >= 10 ? 0.002 : 0.005; }
 function viewEnvelope() { const b = map.getBounds(); return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].join(','); }
 
+// HTML-escape untrusted values (OSM/USGS/parcel tag data is externally editable)
+// before interpolating them into tooltip/popup HTML. Prevents stored XSS in the
+// Capacitor WebView, where injected script could reach native plugin bridges.
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 // Quick name label at the click point (for trails, trailheads, trail ends).
 function namePopup(latlng, html) {
   if (html) L.popup({ closeButton: true, autoPan: false, className: 'name-popup' }).setLatLng(latlng).setContent(html).openOn(map);
@@ -851,7 +861,7 @@ function padSpec(toggle, label, where, style) {
   return makeOverlay({
     toggle, minZoom: 9, cap: 600, zoomNote: 'zoom in to load', style,
     sources: [{ url: PADUS_URL, where, outFields: PAD_FIELDS }],
-    tooltip: a => `<strong>${a.Unit_Nm || a.Loc_Nm || label}</strong><br>${label}`
+    tooltip: a => `<strong>${esc(a.Unit_Nm || a.Loc_Nm || label)}</strong><br>${label}`
   });
 }
 const landGroup = makeGroup('land-status', [
@@ -889,8 +899,8 @@ const parcelSpec = makeOverlay({
   tooltip: p0 => {
     const p = p0._norm;
     const ac = (typeof p.acres === 'number') ? `${p.acres.toFixed(2)} ac` : '';
-    return `<strong>${p.owner || '—'}</strong><br>${p.address || ''}` +
-           `<br><small>${[ac, p.parcel && 'Parcel ' + p.parcel].filter(Boolean).join(' · ')}</small>`;
+    return `<strong>${esc(p.owner || '—')}</strong><br>${esc(p.address || '')}` +
+           `<br><small>${[ac, p.parcel && 'Parcel ' + esc(p.parcel)].filter(Boolean).join(' · ')}</small>`;
   }
 });
 const esmtSpec = makeOverlay({
@@ -901,7 +911,7 @@ const esmtSpec = makeOverlay({
     const yr = a.year_est ? `Est. ${a.year_est}` : '';
     const ac = a.gis_acres ? `${Math.round(a.gis_acres)} ac` : '';
     const acc = ACCESS_LABEL[a.pubaccess] ? `Access: ${ACCESS_LABEL[a.pubaccess]}` : '';
-    return `<strong>${a.esmthldr || 'Conservation Easement'}</strong><br>${a.purpose || 'Conservation easement'}` +
+    return `<strong>${esc(a.esmthldr || 'Conservation Easement')}</strong><br>${esc(a.purpose || 'Conservation easement')}` +
            `<br><small>${[yr, ac, acc].filter(Boolean).join(' · ')}</small>`;
   }
 });
@@ -932,9 +942,9 @@ const usgsTrailSpec = makeOverlay({
     const len = a.lengthmiles ? `${(+a.lengthmiles).toFixed(1)} mi` : '';
     const diff = estDifficulty(a.lengthmiles);
     const uses = [a.hikerpedestrian === 'Y' && 'hiking', a.bicycle === 'Y' && 'bike', a.packsaddle === 'Y' && 'horse'].filter(Boolean).join(' · ');
-    return `<strong>${a.name || 'Unnamed trail'}</strong>` +
-           `<br><small>${[len, diff + ' (est.)', a.primarytrailmaintainer, a.trailsurface].filter(Boolean).join(' · ')}</small>` +
-           (a.nationaltraildesignation ? `<br><small>${a.nationaltraildesignation}</small>` : '') +
+    return `<strong>${esc(a.name || 'Unnamed trail')}</strong>` +
+           `<br><small>${[len, diff + ' (est.)', a.primarytrailmaintainer && esc(a.primarytrailmaintainer), a.trailsurface && esc(a.trailsurface)].filter(Boolean).join(' · ')}</small>` +
+           (a.nationaltraildesignation ? `<br><small>${esc(a.nationaltraildesignation)}</small>` : '') +
            (uses ? `<br><small>${uses}</small>` : '');
   }
 });
@@ -943,9 +953,9 @@ const TRAIL_OUTFIELDS = 'name,lengthmiles,primarytrailmaintainer,trailsurface,na
 const activityTooltip = label => a => {
   const len = a.lengthmiles ? `${(+a.lengthmiles).toFixed(1)} mi` : '';
   const diff = estDifficulty(a.lengthmiles);
-  return `<strong>${a.name || 'Unnamed trail'}</strong> <small>· ${label}</small>` +
-         `<br><small>${[len, diff + ' (est.)', a.primarytrailmaintainer, a.trailsurface].filter(Boolean).join(' · ')}</small>` +
-         (a.nationaltraildesignation ? `<br><small>${a.nationaltraildesignation}</small>` : '');
+  return `<strong>${esc(a.name || 'Unnamed trail')}</strong> <small>· ${label}</small>` +
+         `<br><small>${[len, diff + ' (est.)', a.primarytrailmaintainer && esc(a.primarytrailmaintainer), a.trailsurface && esc(a.trailsurface)].filter(Boolean).join(' · ')}</small>` +
+         (a.nationaltraildesignation ? `<br><small>${esc(a.nationaltraildesignation)}</small>` : '');
 };
 // Trail running: hiker trails on natural (unpaved) singletrack — exclude paved surfaces.
 const runTrailSpec = makeOverlay({
@@ -964,6 +974,54 @@ const mtbTrailSpec = makeOverlay({
   sources: [{ url: TRAILS_URL, where: "bicycle='Y'", outFields: TRAIL_OUTFIELDS }],
   onClick: (props, latlng) => showUsgsTrail(props, latlng),
   tooltip: activityTooltip('mountain biking')
+});
+// ---- OSM Trails (OpenTrailMap) -------------------------------------------------
+// The OpenStreetMap foot-path network — the same data OpenTrailMap visualizes —
+// pulled through the existing Overpass pipeline. OSM carries a hiking-difficulty
+// tag (sac_scale), so grade from that (not a length proxy), falling back to
+// trail_visibility, then 'moderate'. Foot-accessible paths only; sidewalks and
+// road crossings are excluded. Data: © OpenStreetMap contributors (ODbL).
+function osmTrailDifficulty(t) {
+  switch (t.sac_scale) {
+    case 'hiking': return 'easy';
+    case 'mountain_hiking': return 'moderate';
+    case 'demanding_mountain_hiking':
+    case 'alpine_hiking':
+    case 'demanding_alpine_hiking':
+    case 'difficult_alpine_hiking': return 'hard';
+  }
+  if (['bad', 'horrible', 'no'].includes(t.trail_visibility)) return 'hard';
+  if (t.trail_visibility === 'intermediate') return 'moderate';
+  return 'moderate';
+}
+const OSM_TRAIL_CLAUSES = [
+  'way["highway"="path"]({{bbox}});',
+  'way["highway"="footway"]["footway"!~"^(sidewalk|crossing)$"]({{bbox}});',
+  'way["highway"="bridleway"]({{bbox}});'
+];
+let osmTrailCache = { key: null, promise: null };
+function fetchOsmTrails(env, cap) {
+  if (osmTrailCache.key !== env) {
+    osmTrailCache = { key: env, promise: fetchOverpassLines(OSM_TRAIL_CLAUSES, env, cap) };
+  }
+  return osmTrailCache.promise;
+}
+const SAC_LABEL = {
+  hiking: 'T1 · hiking', mountain_hiking: 'T2 · mountain hiking',
+  demanding_mountain_hiking: 'T3 · demanding', alpine_hiking: 'T4 · alpine',
+  demanding_alpine_hiking: 'T5 · demanding alpine', difficult_alpine_hiking: 'T6 · difficult alpine'
+};
+const osmTrailSpec = makeOverlay({
+  toggle: 'input[data-trails="osm"]', minZoom: 13, cap: 800, zoomNote: 'zoom in to load',
+  style: f => ({ color: diffColors[osmTrailDifficulty(f.properties)], weight: 2.2, opacity: 0.85, dashArray: '7,3,2,3' }),
+  sources: [{ fetch: async (env, off, cap) => ({ type: 'FeatureCollection', features: await fetchOsmTrails(env, cap) }) }],
+  tooltip: a => {
+    const bits = [SAC_LABEL[a.sac_scale], a.surface && esc(a.surface),
+      a.trail_visibility && 'visibility: ' + esc(a.trail_visibility),
+      a.access && 'access: ' + esc(a.access)].filter(Boolean);
+    return `<strong>${esc(a.name || a.ref || 'OSM path')}</strong> <small>· OpenStreetMap</small>` +
+           (bits.length ? `<br><small>${bits.join(' · ')}</small>` : '');
+  }
 });
 // Trailhead / terminus markers ---------------------------------------------
 // USGS delivers trails as many short segments. Merge segments that share a name,
@@ -1011,10 +1069,10 @@ function buildTrailEndpoints(feats) {
     termini.forEach((pt, i) => {
       if (budget-- <= 0) return;
       const kind = i === 0 ? 'head' : 'end';
-      const epLabel = `${name} — ${kind === 'head' ? 'Trailhead' : 'Terminus'}`;
+      const epLabel = `${esc(name)} — ${kind === 'head' ? 'Trailhead' : 'Terminus'}`;
       L.marker([pt[1], pt[0]], { icon: endpointIcon(kind), interactive: true, keyboard: false })
         .bindTooltip(epLabel, { direction: 'top' })
-        .on('click', e => namePopup(e.latlng, `<strong>${name}</strong><br><small>${kind === 'head' ? 'Trailhead' : 'Trail end'}</small>`))
+        .on('click', e => namePopup(e.latlng, `<strong>${esc(name)}</strong><br><small>${kind === 'head' ? 'Trailhead' : 'Trail end'}</small>`))
         .addTo(trailEndpointLayer);
     });
   }
@@ -1032,7 +1090,7 @@ usgsTrailSpec.cb.addEventListener('change', refreshEndpointVisibility);
 map.on('zoomend', refreshEndpointVisibility);
 
 const usgsTrailLayer = usgsTrailSpec.layer; // referenced by state navigation
-const trailGroup = makeGroup('trail-status', [usgsTrailSpec, runTrailSpec, mtbTrailSpec], info => {
+const trailGroup = makeGroup('trail-status', [usgsTrailSpec, runTrailSpec, mtbTrailSpec, osmTrailSpec], info => {
   if (info.notes.length) return ['· zoom in to load', 'error'];
   return info.total >= 1500 ? [`· ${info.total}+ (zoom in)`, 'error'] : [`· ${info.total} trails`, ''];
 });
@@ -1151,7 +1209,7 @@ const campSpecs = [
   campSpec('input[data-camp="water"]', 'water', '#2a8fd0', a => {
     const kind = WATER_LABEL[a.amenity] || WATER_LABEL[a.natural] || WATER_LABEL[a.man_made] || 'Water source';
     const drink = a.drinking_water === 'no' ? ' · not potable' : (a.drinking_water === 'yes' ? ' · potable' : '');
-    return `<strong>${a.name || kind}</strong><br><small>${kind}${drink}</small>`;
+    return `<strong>${esc(a.name || kind)}</strong><br><small>${kind}${drink}</small>`;
   }),
   campSpec('input[data-camp="cg"]', 'cg', '#2e8b57', a => campTip(a, 'Campground')),
   campSpec('input[data-camp="rv"]', 'rv', '#d98a2b', a => campTip(a, 'RV / Caravan site')),
@@ -1162,10 +1220,10 @@ function campTip(a, label) {
   const bits = [];
   if (a.fee === 'no') bits.push('free'); else if (a.fee === 'yes') bits.push('fee');
   if (a.tents === 'yes') bits.push('tents');
-  if (a.reservation) bits.push('reservation: ' + a.reservation);
-  if (a.capacity) bits.push(a.capacity + ' sites');
-  if (a.operator) bits.push(a.operator);
-  return `<strong>${a.name || label}</strong><br><small>${label}` + (bits.length ? ' · ' + bits.join(' · ') : '') + '</small>';
+  if (a.reservation) bits.push('reservation: ' + esc(a.reservation));
+  if (a.capacity) bits.push(esc(a.capacity) + ' sites');
+  if (a.operator) bits.push(esc(a.operator));
+  return `<strong>${esc(a.name || label)}</strong><br><small>${label}` + (bits.length ? ' · ' + bits.join(' · ') : '') + '</small>';
 }
 const campGroup = makeGroup('camp-status', campSpecs, info => {
   if (info.notes.length) return ['· zoom in to load', 'error'];
@@ -1209,8 +1267,8 @@ const offroadSpec = makeOverlay({
   onClick: (props, latlng) => showOffroad(props, latlng),
   tooltip: a => {
     const diff = offroadDifficulty(a);
-    const bits = [diff + ' · ' + RIG_HINT[diff], a.tracktype && a.tracktype.replace('grade', 'grade '), a.surface, a.smoothness].filter(Boolean);
-    return `<strong>${a.name || a.ref || '4x4 / OHV track'}</strong><br><small>${bits.join(' · ')}</small>`;
+    const bits = [diff + ' · ' + RIG_HINT[diff], a.tracktype && esc(a.tracktype.replace('grade', 'grade ')), a.surface && esc(a.surface), a.smoothness && esc(a.smoothness)].filter(Boolean);
+    return `<strong>${esc(a.name || a.ref || '4x4 / OHV track')}</strong><br><small>${bits.join(' · ')}</small>`;
   }
 });
 const offroadGroup = makeGroup('offroad-status', [offroadSpec], info => {
@@ -1438,7 +1496,7 @@ function showUsgsTrail(props, latlng) {
   updateArBtn();
   renderAccessAndEmergency(null);
   detail.classList.add('open');
-  namePopup(latlng, `<strong>${name}</strong>`); // name label right at the click point
+  namePopup(latlng, `<strong>${esc(name)}</strong>`); // name label right at the click point
 }
 function showOffroad(props, latlng) {
   currentTrail = null;
