@@ -28,6 +28,7 @@
     "@capacitor/share": "^6.0.4",
     "@capacitor/splash-screen": "^6.0.2",
     "@capacitor/status-bar": "^6.0.1",
+    "cordova-plugin-purchase": "^13.17.2",
     "leaflet": "^1.9.4"
   },
   "devDependencies": {

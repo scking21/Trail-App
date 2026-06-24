@@ -169,24 +169,27 @@ Helpers: `requirePro(feature, action)` runs `action` if entitled else paywalls
 
 ### Real store subscriptions (`billing.js`)
 
-`billing.js` is a defensive wrapper around the **RevenueCat Capacitor plugin**
-(`@revenuecat/purchases-capacitor`), which fronts both **Apple StoreKit** and
-**Google Play Billing** and handles receipt validation, intro/trial offers, and
-cross-platform entitlement state. On the web (or any build without the plugin)
+`billing.js` is a defensive wrapper around **cordova-plugin-purchase**
+(CdvPurchase v13), an open-source (MIT) library that talks **directly** to
+**Apple StoreKit** and **Google Play Billing** — entirely on-device, with no
+third-party backend, account, or analytics, which keeps the app’s “no servers /
+no trackers” posture intact. On the web (or any build without the plugin)
 `Billing.isAvailable()` is `false` and the app falls back to the simulated
 Entitlement flow, so dev never breaks. When live, the paywall’s Subscribe /
 Trial / Restore buttons route through the store and `Billing` syncs the result
-back into `Entitlement` via `setFromStore()`.
+back into `Entitlement` via `setFromStore()`. Receipt validation is on-device
+(no server); add a validator URL in `billing.js` later if you want server-side
+verification.
 
 To go live (full checklist in the header comment of `billing.js`):
 
-1. `npm i @revenuecat/purchases-capacitor && npx cap sync`
+1. `npm i cordova-plugin-purchase && npx cap sync`
 2. Create subscription products `trailpro_monthly` / `trailpro_yearly` in
    **App Store Connect** and **Play Console**, each with a 14-day free-trial /
    introductory offer.
-3. In **RevenueCat**: add both apps, create an entitlement `pro` with both
-   products attached, and an Offering `default` with monthly + annual packages.
-4. Paste your public SDK keys into `REVENUECAT_API_KEYS` in `billing.js`.
+
+No API keys, dashboards, or third-party accounts to configure — the product IDs
+are all the library needs.
 
 Apple/Google both require a visible **Restore purchases** path — it’s in the
 paywall modal.
