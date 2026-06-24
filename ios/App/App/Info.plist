@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Trail App</string>
+	<string>Blackrow Trails</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -27,9 +27,9 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Show the trail marker over your live camera in AR view.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Trail App records your track in the background so the trail you walk is captured even with the screen off. Only used while you’re recording.</string>
+	<string>Blackrow Trails records your track in the background so the trail you walk is captured even with the screen off. Only used while you’re recording.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Trail App uses your location to center the map on you and show nearby trailheads and water sources.</string>
+	<string>Blackrow Trails uses your location to center the map on you and show nearby trailheads and water sources.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
@@ -40,7 +40,7 @@
 	<string>Main</string>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
-		<string>armv7</string>
+		<string>arm64</string>
 	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>

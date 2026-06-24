@@ -1,13 +1,13 @@
 {
   "name": "trail-app",
   "version": "1.0.0",
-  "description": "Trail App — offline-capable trail maps, 50-state directory, and trip planner. Native iOS & Android via Capacitor.",
+  "description": "Blackrow Trails — offline-capable trail maps, 50-state directory, and trip planner. Native iOS & Android via Capacitor.",
   "private": true,
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "copy": "cpx \"index.html\" www && cpx \"sw.js\" www && cpx \"geo.js\" www && cpx \"ar.js\" www && echo copied",
+    "copy": "cpx \"index.html\" www && cpx \"sw.js\" www && cpx \"geo.js\" www && cpx \"ar.js\" www && cpx \"billing.js\" www && cpx \"share.js\" www && cpx \"vendor/**/*\" \"www/vendor\" && echo copied",
     "config:native": "bash scripts/apply-native-config.sh",
     "ios:bump": "bash scripts/bump-ios-build.sh",
     "test": "jest",
@@ -25,8 +25,10 @@
     "@capacitor/core": "^6.1.2",
     "@capacitor/geolocation": "^6.0.1",
     "@capacitor/ios": "^6.1.2",
+    "@capacitor/share": "^6.0.4",
     "@capacitor/splash-screen": "^6.0.2",
-    "@capacitor/status-bar": "^6.0.1"
+    "@capacitor/status-bar": "^6.0.1",
+    "leaflet": "^1.9.4"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.1.2",

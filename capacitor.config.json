@@ -1,6 +1,6 @@
 {
   "appId": "com.trailapp.mobile",
-  "appName": "Trail App",
+  "appName": "Blackrow Trails",
   "webDir": "www",
   "server": {
     "androidScheme": "https",
