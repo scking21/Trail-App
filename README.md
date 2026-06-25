@@ -18,15 +18,23 @@ states is the header **region dropdown** (top-right) — the old standalone
 
 ```
 index.html             ← source of truth for the app (edit this)
-www/index.html         ← copy that Capacitor bundles (run `npm run build` to refresh)
+privacy.html terms.html ← legal pages linked from the app (edit these)
+geo.js ar.js billing.js share.js sw.js ← app modules (edit these)
+www/                   ← GENERATED build output; do not edit (gitignored)
 capacitor.config.json  ← app id, name, plugin config
 package.json           ← Capacitor deps + scripts
 ios/                   ← generated native Xcode project (after `cap add ios`)
 android/               ← generated native Android Studio project (after `cap add android`)
 ```
 
-> Edit `index.html`, then `npm run build` (or `npm run sync`) to push changes into
-> `www/` and the native projects.
+> **Always use `npm run sync` — never `npx cap sync` directly.** `www/` is
+> generated build output, not a source folder: `npm run sync` first runs
+> `npm run build`, which wipes `www/` clean and re-copies every source file
+> (`index.html`, `privacy.html`, `terms.html`, the `*.js` modules, and
+> `vendor/`) before invoking `cap sync`. Running `npx cap sync` on its own skips
+> that regenerate step and packages whatever stale copy happens to be in `www/`
+> — the exact drift that once shipped an already-fixed XSS bug into the native
+> build. Edit the root files only; never hand-edit `www/`.
 
 ## One-time toolchain setup (not yet installed on this machine)
 
