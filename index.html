@@ -1565,6 +1565,11 @@ function renderPlanner() {
 
   renderTripKit(); // gear / hazards / rig reflect the plan (or map view when empty)
 
+  // Plan items can carry names/fields sourced from world-editable map data
+  // (OSM/Overpass) or free-text input, and are persisted to localStorage, so
+  // escape before interpolating into innerHTML to prevent stored XSS.
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
   wrap.innerHTML = '';
   for (let d = 1; d <= dayMeta.count; d++) {
     const items = plan.filter(p => p.day === d);
@@ -1594,8 +1599,8 @@ function renderPlanner() {
         for (let n = 1; n <= dayMeta.count; n++) if (n !== d) moveOpts.push(`<option value="${n}">→ ${dayName(n)}</option>`);
         row.innerHTML =
           `<span class="pi-bar" style="background:${diffColors[t.diff] || '#1f6feb'}"></span>` +
-          `<div class="pi-main"><div class="pi-name">${(t.kind === 'route' ? '🗺️ ' : '') + t.name}</div>` +
-          `<div class="pi-meta">${[t.length, t.gain, t.time, t.land].filter(Boolean).join(' · ')}</div></div>` +
+          `<div class="pi-main"><div class="pi-name">${(t.kind === 'route' ? '🗺️ ' : '') + esc(t.name)}</div>` +
+          `<div class="pi-meta">${[t.length, t.gain, t.time, t.land].filter(Boolean).map(esc).join(' · ')}</div></div>` +
           (moveOpts.length ? `<select class="pi-move" title="Move to another day"><option value="">Move…</option>${moveOpts.join('')}</select>` : '') +
           `<button class="pi-remove" title="Remove">✕</button>`;
         row.querySelector('.pi-name').addEventListener('click', () => openPlanItem(t));
@@ -2329,7 +2334,7 @@ regionSelect.addEventListener('change', e => {
         row.className = 'ts-item';
         row.innerHTML = `<span class="ts-bar" style="background:${diffColors[t.diff] || '#1f6feb'}"></span>` +
           `<div><div class="ts-name">${esc(t.name)}</div>` +
-          `<div class="ts-meta">${[t.length, t.gain, t.diff, t.land].filter(Boolean).join(' · ')}</div></div>`;
+          `<div class="ts-meta">${[t.length, t.gain, t.diff, t.land].filter(Boolean).map(esc).join(' · ')}</div></div>`;
         row.addEventListener('click', () => pickCurated(t));
         results.appendChild(row);
       });
@@ -2345,7 +2350,7 @@ regionSelect.addEventListener('change', e => {
           row.className = 'ts-item';
           row.innerHTML = `<span class="ts-bar"></span>` +
             `<div><div class="ts-name">${esc(r.props.name)}</div>` +
-            `<div class="ts-meta">${[len, r.props.trailsurface, r.props.primarytrailmaintainer].filter(Boolean).join(' · ') || 'USGS trail'}</div></div>`;
+            `<div class="ts-meta">${[len, r.props.trailsurface, r.props.primarytrailmaintainer].filter(Boolean).map(esc).join(' · ') || 'USGS trail'}</div></div>`;
           row.addEventListener('click', () => pickUsgs(r));
           results.appendChild(row);
         });

@@ -7,11 +7,12 @@
     "node": ">=20"
   },
   "scripts": {
-    "copy": "cpx \"index.html\" www && cpx \"sw.js\" www && cpx \"geo.js\" www && cpx \"ar.js\" www && cpx \"billing.js\" www && cpx \"share.js\" www && cpx \"vendor/**/*\" \"www/vendor\" && echo copied",
+    "clean": "node -e \"fs.rmSync('www',{recursive:true,force:true})\"",
+    "copy": "cpx \"{index,privacy,terms}.html\" www && cpx \"{sw,geo,ar,billing,share}.js\" www && cpx \"vendor/**/*\" \"www/vendor\" && echo copied",
     "config:native": "bash scripts/apply-native-config.sh",
     "ios:bump": "bash scripts/bump-ios-build.sh",
     "test": "jest",
-    "build": "npm run copy",
+    "build": "npm run clean && npm run copy",
     "sync": "npm run build && cap sync",
     "open:ios": "cap open ios",
     "open:android": "cap open android",
@@ -28,6 +29,7 @@
     "@capacitor/share": "^6.0.4",
     "@capacitor/splash-screen": "^6.0.2",
     "@capacitor/status-bar": "^6.0.1",
+    "cordova-plugin-purchase": "^13.17.2",
     "leaflet": "^1.9.4"
   },
   "devDependencies": {
