@@ -1,6 +1,6 @@
 # Blackrow Trails — Privacy Policy
 
-_Last updated: 2026-06-17_
+_Last updated: 2026-06-27_
 
 Blackrow Trails is built to be private by default. Your location and your planning
 data stay on your device. We do not run servers that collect your data, we do
@@ -17,6 +17,8 @@ storage) and is never uploaded to us or anyone else:
 - Tracks you record (the GPS path you walked, with elevations and timestamps)
 - Trails you save from a recording
 - Your map-mode and gear-list preferences
+- Travel reservations (flights, hotels, car rentals, trains) you add, and any
+  e-ticket or itinerary documents you upload for them
 
 You can remove any single item in the app, or erase **everything** at once with
 **Planner → Privacy & data → "Delete all my data on this device."**
@@ -34,6 +36,16 @@ You can remove any single item in the app, or erase **everything** at once with
   map, record a track, warn you when you stray off a followed route, point the AR
   marker, and place waypoints. **Your GPS position is never transmitted to any
   server.**
+
+## Travel reservations
+
+When you add a reservation by uploading an e-ticket or itinerary (PDF or
+screenshot), the file is read and parsed **entirely on your device** — the text
+extraction and OCR run locally, and the original document is saved only in the
+app's local storage. **Nothing about your reservations or uploaded documents is
+sent to us or any third party.** Reservation details and their attached documents
+are included in the device backup you create (see "Files you export"), and are
+removed along with everything else by **"Delete all my data on this device."**
 
 ## Network requests (what does leave the device)
 

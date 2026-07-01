@@ -1,7 +1,8 @@
 /* Blackrow Trails service worker — offline app shell + map tile caching.
  * Lets previously-viewed areas load with no signal (backcountry use). */
-const SHELL_CACHE = 'trail-shell-v1';
+const SHELL_CACHE = 'trail-shell-v2';   // bumped: adds the reservations bundle
 const TILE_CACHE  = 'trail-tiles-v1';
+const ASSET_CACHE = 'trail-assets-v1';  // vendored pdf.js / tesseract / jeep-sqlite
 const MAX_TILES   = 1500;            // ~ a few regions at trail zooms
 
 // Dev cache-buster: on localhost, serve the app shell network-first so edits show
@@ -15,7 +16,14 @@ const SHELL_ASSETS = [
   './index.html',
   './vendor/leaflet/leaflet.css',
   './vendor/leaflet/leaflet.js',
+  './reservations.js',
 ];
+
+// Vendored reservations assets (loaded on demand). Cached on first fetch so the
+// Travel feature keeps working offline afterwards.
+const isResAsset = (url) =>
+  /\/vendor\/(pdfjs|tesseract|jeep-sqlite)\//.test(url) ||
+  /\/assets\/sql-wasm\.wasm$/.test(url);
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
@@ -29,7 +37,7 @@ self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys
-        .filter((k) => k !== SHELL_CACHE && k !== TILE_CACHE)
+        .filter((k) => k !== SHELL_CACHE && k !== TILE_CACHE && k !== ASSET_CACHE)
         .map((k) => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
@@ -71,11 +79,28 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
+  // Vendored reservations assets: cache-first, store on first fetch.
+  if (isResAsset(url)) {
+    e.respondWith((async () => {
+      const cache = await caches.open(ASSET_CACHE);
+      const hit = await cache.match(req, { ignoreSearch: true });
+      if (hit) return hit;
+      try {
+        const res = await fetch(req);
+        if (res.ok) cache.put(req, res.clone()); // never cache 404s/errors
+        return res;
+      } catch {
+        return hit || Response.error();
+      }
+    })());
+    return;
+  }
+
   // App shell (same-origin + Leaflet CDN).
   if (req.destination === 'document' || SHELL_ASSETS.some((a) => url.endsWith(a.replace('./', '')))) {
     e.respondWith((async () => {
       const cache = await caches.open(SHELL_CACHE);
-      const fromNet = () => fetch(req).then((res) => { cache.put(req, res.clone()); return res; });
+      const fromNet = () => fetch(req).then((res) => { if (res.ok) cache.put(req, res.clone()); return res; });
       if (DEV) {
         // Dev: network-first so edits show on reload; fall back to cache if offline.
         try { return await fromNet(); } catch { return (await cache.match(req, { ignoreSearch: true })) || Response.error(); }
