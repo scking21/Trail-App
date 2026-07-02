@@ -477,6 +477,7 @@
   <nav>
     <button class="active" data-tab="map">Map</button>
     <button data-tab="planner">Planner</button>
+    <button data-tab="reservations">Travel</button>
   </nav>
   <select id="region-select" title="Jump to region"></select>
 </header>
@@ -704,11 +705,19 @@
   </div>
 </div>
 
+<div class="tab" id="tab-reservations">
+  <div id="res-mount"></div>
+</div>
+
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="geo.js"></script>
 <script src="ar.js"></script>
 <script src="billing.js"></script>
 <script src="share.js"></script>
+<!-- Web-only: registers the <jeep-sqlite> element used by the reservations DB.
+     Harmless on native (Capacitor uses the native SQLite plugin instead). -->
+<script type="module" src="vendor/jeep-sqlite/jeep-sqlite.esm.js"></script>
+<script type="module" src="reservations.js"></script>
 <script>
 // ---------- Tabs ----------
 document.querySelectorAll('nav button').forEach(btn => {
@@ -718,6 +727,23 @@ document.querySelectorAll('nav button').forEach(btn => {
     if (btn.dataset.tab === 'map') map.invalidateSize();
   });
 });
+
+// ---------- Reservations (Travel) tab: mount on first open ----------
+(function () {
+  const btn = document.querySelector('nav button[data-tab="reservations"]');
+  const mount = document.getElementById('res-mount');
+  if (!btn || !mount) return;
+  let mounted = false;
+  btn.addEventListener('click', () => {
+    if (mounted) return;
+    mounted = true;
+    mount.textContent = 'Loading…';
+    const go = () => window.BlackrowReservations
+      ? window.BlackrowReservations.mount(mount).catch(e => { mount.textContent = 'Travel module failed to load.'; console.error(e); })
+      : setTimeout(go, 150); // reservations.js is a module; wait until it registers
+    go();
+  });
+})();
 
 // ---------- Map ----------
 const map = L.map('map').setView([33.43, -111.42], 12); // Superstition Mtns, AZ
@@ -2846,10 +2872,15 @@ window.__toolCluster = toolCluster;
     saved.textContent = msg; saved.style.color = ok === false ? '#c0392b' : 'var(--accent)';
     setTimeout(() => { saved.textContent = o; saved.style.color = 'var(--accent)'; }, 4000); };
 
-  backupBtn.addEventListener('click', () => {
+  backupBtn.addEventListener('click', async () => {
     const data = {};
     KEYS.forEach(k => { const v = localStorage.getItem(k); if (v != null) data[k] = v; });
-    const payload = { app: 'trail-app', kind: 'trip-backup', version: 1, savedAt: new Date().toISOString(), data };
+    // Reservations live in SQLite, not localStorage — pull them in too.
+    let reservations = null;
+    try {
+      if (window.BlackrowReservations) reservations = await window.BlackrowReservations.exportForBackup();
+    } catch (e) { console.warn('reservations backup skipped', e); }
+    const payload = { app: 'trail-app', kind: 'trip-backup', version: 1, savedAt: new Date().toISOString(), data, reservations };
     const fname = 'trail-app-trip-' + new Date().toISOString().slice(0, 10) + '.json';
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     try {
@@ -2870,7 +2901,7 @@ window.__toolCluster = toolCluster;
     const file = fileInput.files && fileInput.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       fileInput.value = '';
       let payload;
       try { payload = JSON.parse(String(reader.result)); } catch { flash('Couldn’t read that file', false); return; }
@@ -2882,7 +2913,13 @@ window.__toolCluster = toolCluster;
       try {
         KEYS.forEach(k => { if (k in payload.data) localStorage.setItem(k, payload.data[k]); else localStorage.removeItem(k); });
       } catch { flash('Restore failed (storage full?)', false); return; }
-      window.location.reload(); // every module re-reads from localStorage on load
+      // Restore reservations into SQLite (best-effort) before reloading.
+      try {
+        if (payload.reservations && window.BlackrowReservations) {
+          await window.BlackrowReservations.importFromBackup(payload.reservations);
+        }
+      } catch (e) { console.warn('reservations restore skipped', e); }
+      window.location.reload(); // every module re-reads from storage on load
     };
     reader.onerror = () => { flash('Couldn’t read that file', false); fileInput.value = ''; };
     reader.readAsText(file);

@@ -8,11 +8,14 @@
   },
   "scripts": {
     "clean": "node -e \"fs.rmSync('www',{recursive:true,force:true})\"",
-    "copy": "cpx \"{index,privacy,terms}.html\" www && cpx \"{sw,geo,ar,billing,share}.js\" www && cpx \"vendor/**/*\" \"www/vendor\" && echo copied",
+    "copy": "cpx \"{index,privacy,terms}.html\" www && cpx \"{sw,geo,ar,billing,share,reservations}.js\" www && cpx \"vendor/**/*\" \"www/vendor\" && cpx \"assets/**/*\" \"www/assets\" && echo copied",
+    "copy:assets": "node scripts/copy-res-assets.mjs",
+    "build:res": "node esbuild.config.mjs",
+    "typecheck": "tsc --noEmit",
     "config:native": "bash scripts/apply-native-config.sh",
     "ios:bump": "bash scripts/bump-ios-build.sh",
     "test": "jest",
-    "build": "npm run clean && npm run copy",
+    "build": "npm run clean && npm run copy:assets && npm run build:res && npm run copy",
     "sync": "npm run build && cap sync",
     "open:ios": "cap open ios",
     "open:android": "cap open android",
@@ -21,20 +24,30 @@
   },
   "dependencies": {
     "@capacitor-community/background-geolocation": "^1.2.21",
+    "@capacitor-community/sqlite": "^8.1.0",
     "@capacitor/android": "^8.4.1",
     "@capacitor/app": "^8.1.0",
     "@capacitor/core": "^8.4.1",
+    "@capacitor/filesystem": "^8.1.0",
     "@capacitor/geolocation": "^8.2.0",
     "@capacitor/ios": "^8.4.1",
     "@capacitor/share": "^8.0.1",
     "@capacitor/splash-screen": "^8.0.1",
     "@capacitor/status-bar": "^8.0.2",
     "cordova-plugin-purchase": "^13.17.2",
-    "leaflet": "^1.9.4"
+    "jeep-sqlite": "^2.8.0",
+    "leaflet": "^1.9.4",
+    "pdfjs-dist": "^4.10.38",
+    "tesseract.js": "^5.1.1"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.4.1",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20.19.43",
     "cpx2": "^9.0.0",
-    "jest": "^30.4.2"
+    "esbuild": "^0.23.1",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.11",
+    "typescript": "^5.9.3"
   }
 }
