@@ -540,6 +540,7 @@
       <label class="layer-row"><input type="checkbox" checked data-trails="usgs"><span class="swatch" style="background:#c0563b"></span>Hiking Trails (USGS)</label>
       <label class="layer-row"><input type="checkbox" data-trails="run"><span class="swatch" style="background:repeating-linear-gradient(90deg,#2e8b57 0 5px,transparent 5px 8px)"></span>Trail Running (singletrack)</label>
       <label class="layer-row"><input type="checkbox" data-trails="mtb"><span class="swatch" style="background:repeating-linear-gradient(90deg,#7a3ca8 0 2px,transparent 2px 5px)"></span>Mountain Biking</label>
+      <label class="layer-row"><input type="checkbox" data-trails="osm"><span class="swatch" style="background:repeating-linear-gradient(90deg,#1f6f3c 0 6px,transparent 6px 8px,#1f6f3c 8px 9px,transparent 9px 11px)"></span>OSM Trails (OpenTrailMap)</label>
       <label class="layer-row"><input type="checkbox" checked id="endpoints-toggle"><span style="display:inline-flex;gap:2px"><span style="font-size:12px">🥾</span><span style="font-size:12px">🏁</span></span>Trailheads &amp; termini</label>
       <div class="legend-row" style="margin-top:8px"><span class="dot" style="background:var(--easy)"></span>Easy</div>
       <div class="legend-row"><span class="dot" style="background:var(--moderate)"></span>Moderate</div>
@@ -547,7 +548,8 @@
       <div class="legend-row" style="margin-top:8px"><span class="leg-line" style="border-top:2.5px solid #888"></span>Hiking — solid</div>
       <div class="legend-row"><span class="leg-line" style="border-top:2.5px dashed #888"></span>Trail running — dashed (natural-surface singletrack)</div>
       <div class="legend-row"><span class="leg-line" style="border-top:2.5px dotted #888"></span>Mountain biking — dotted (bike-permitted)</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4">Line &amp; marker color show difficulty (graded by length, est.). Line style shows activity. Run/bike layers filter the USGS trail network by surface and bike access.</div>
+      <div class="legend-row"><span class="leg-line" style="border-top:2.5px dashed #1f6f3c"></span>OSM trail — dash-dot (OpenStreetMap path network)</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4">Line &amp; marker color show difficulty (graded by length, est.). Line style shows activity. Run/bike layers filter the USGS trail network by surface and bike access. The OSM Trails layer adds the OpenStreetMap foot-path network (as visualized by <a href="https://github.com/osmus/OpenTrailMap" target="_blank" rel="noopener">OpenTrailMap</a>), graded by its <code>sac_scale</code> tag. Community-sourced — may be inaccurate; <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener">report a problem</a>. Map data © OpenStreetMap contributors, <a href="https://opendatacommons.org/licenses/odbl/" target="_blank" rel="noopener">ODbL</a>.</div>
     </section>
     <section>
       <h2>Off-Road / OHV <span id="offroad-status"></span></h2>
@@ -991,6 +993,56 @@ const mtbTrailSpec = makeOverlay({
   onClick: (props, latlng) => showUsgsTrail(props, latlng),
   tooltip: activityTooltip('mountain biking')
 });
+// ---- OSM Trails (OpenTrailMap) -------------------------------------------------
+// The OpenStreetMap foot-path network — the same data OpenTrailMap visualizes —
+// pulled through the existing Overpass pipeline. OSM carries a hiking-difficulty
+// tag (sac_scale), so grade from that (not a length proxy), falling back to
+// trail_visibility, then 'moderate'. Foot-accessible paths only; sidewalks and
+// road crossings are excluded. Data: © OpenStreetMap contributors (ODbL).
+function osmTrailDifficulty(t) {
+  switch (t.sac_scale) {
+    case 'hiking': return 'easy';
+    case 'mountain_hiking': return 'moderate';
+    case 'demanding_mountain_hiking':
+    case 'alpine_hiking':
+    case 'demanding_alpine_hiking':
+    case 'difficult_alpine_hiking': return 'hard';
+  }
+  if (['bad', 'horrible', 'no'].includes(t.trail_visibility)) return 'hard';
+  if (t.trail_visibility === 'intermediate') return 'moderate';
+  return 'moderate';
+}
+const OSM_TRAIL_CLAUSES = [
+  'way["highway"="path"]({{bbox}});',
+  'way["highway"="footway"]["footway"!~"^(sidewalk|crossing)$"]({{bbox}});',
+  'way["highway"="bridleway"]({{bbox}});'
+];
+let osmTrailCache = { key: null, promise: null };
+function fetchOsmTrails(env, cap) {
+  if (osmTrailCache.key !== env) {
+    osmTrailCache = { key: env, promise: fetchOverpassLines(OSM_TRAIL_CLAUSES, env, cap) };
+  }
+  return osmTrailCache.promise;
+}
+const SAC_LABEL = {
+  hiking: 'T1 · hiking', mountain_hiking: 'T2 · mountain hiking',
+  demanding_mountain_hiking: 'T3 · demanding', alpine_hiking: 'T4 · alpine',
+  demanding_alpine_hiking: 'T5 · demanding alpine', difficult_alpine_hiking: 'T6 · difficult alpine'
+};
+const osmTrailSpec = makeOverlay({
+  toggle: 'input[data-trails="osm"]', minZoom: 13, cap: 800, zoomNote: 'zoom in to load',
+  style: f => ({ color: diffColors[osmTrailDifficulty(f.properties)], weight: 2.2, opacity: 0.85, dashArray: '7,3,2,3' }),
+  sources: [{ fetch: async (env, off, cap) => ({ type: 'FeatureCollection', features: await fetchOsmTrails(env, cap) }) }],
+  // OSM tags are world-editable free text — escape before interpolating into the
+  // tooltip HTML to prevent stored XSS.
+  tooltip: a => {
+    const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const bits = [SAC_LABEL[a.sac_scale], a.surface, a.trail_visibility && 'visibility: ' + a.trail_visibility,
+      a.access && 'access: ' + a.access].filter(Boolean).map(esc);
+    return `<strong>${esc(a.name || a.ref || 'OSM path')}</strong> <small>· OpenStreetMap</small>` +
+           (bits.length ? `<br><small>${bits.join(' · ')}</small>` : '');
+  }
+});
 // Trailhead / terminus markers ---------------------------------------------
 // USGS delivers trails as many short segments. Merge segments that share a name,
 // then a coordinate touched by only ONE segment end is a true terminus of that
@@ -1058,7 +1110,7 @@ usgsTrailSpec.cb.addEventListener('change', refreshEndpointVisibility);
 map.on('zoomend', refreshEndpointVisibility);
 
 const usgsTrailLayer = usgsTrailSpec.layer; // referenced by state navigation
-const trailGroup = makeGroup('trail-status', [usgsTrailSpec, runTrailSpec, mtbTrailSpec], info => {
+const trailGroup = makeGroup('trail-status', [usgsTrailSpec, runTrailSpec, mtbTrailSpec, osmTrailSpec], info => {
   if (info.notes.length) return ['· zoom in to load', 'error'];
   return info.total >= 1500 ? [`· ${info.total}+ (zoom in)`, 'error'] : [`· ${info.total} trails`, ''];
 });
